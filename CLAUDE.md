@@ -26,7 +26,7 @@ If `cargo build` fails with "Access is denied", the binary is still running — 
 
 ## Architecture
 
-Iced (0.13) Elm-style architecture: **State → Message → Update → View**.
+Iced (0.14) Elm-style architecture: **State → Message → Update → View**.
 
 - **`src/main.rs`** — `App` struct (state with `catalog`, `selected`, `search`), `Message` enum, `Screen` enum (`ProfileSelect` → `PackageSelect`), `update()`/`view()` entry points. Standalone functions `profile_card()`, `card_style()`, `back_button_style()`.
 - **`src/catalog.rs`** — `Package` struct (derives `Deserialize`), `load_catalog()` (embeds `packages.toml` via `include_str!`), `default_selection()`, `category_display_name()`, `categories()`.
@@ -38,7 +38,7 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 
 ## Conventions
 
-- **Iced 0.13 API** — uses `iced::application(title, update, view)` builder, NOT the older `Sandbox` trait. Context7 docs may show outdated patterns.
+- **Iced 0.14 API** — uses `iced::application(new, update, view)` builder where `new` returns `(Self, Task<Message>)` and `update` returns `Task<Message>`. NOT the older `Sandbox` trait.
 - Use `Element<'_, Message>` (explicit elided lifetime) in view methods to avoid `mismatched_lifetime_syntaxes` warnings
 - **Rust 2024 edition** — requires Rust 1.85+
 - Dark theme by default; card/button styles use explicit RGB values for contrast control (don't rely on palette values for card backgrounds — they blend with text on hover)
@@ -46,6 +46,11 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 - Profile cards are `button` widgets wrapping `column` layouts, styled with closures passed to `.style()`
 - Center content in a screen: `container(content).center_x(Length::Fill).center_y(Length::Fill)`
 - `MUTED` constant (`Color::from_rgb(0.55, 0.55, 0.58)`) for secondary/subtitle text
-- Iced 0.13 `Padding` does NOT support `[_; 4]` arrays — use `padding::left(n)`, `padding::top(n)`, etc. for directional padding
+- Iced `Padding` does NOT support `[_; 4]` arrays — use `padding::left(n)`, `padding::top(n)`, etc. for directional padding
+- `checkbox(bool)` builder pattern — use `.label()` and `.on_toggle()`, no positional label arg
+- `button::Style` requires `snap: false` field in struct literals
+- **Icons**: Lucide icons via `iced_fonts` crate (feature `"lucide"`). Use `text(char).font(iced_fonts::LUCIDE_FONT)`. Codepoints in `profile.rs`. Emoji chars do NOT render in Iced — always use an icon font.
+- Load icon fonts via `.font(iced_fonts::LUCIDE_FONT_BYTES)` on the application builder
+- Scrollable content needs explicit `width(Length::Fill)` on inner column or it shrink-wraps
 - Button styles: extract to standalone functions (`card_style`, `back_button_style`) when reusable; inline closures only for one-offs
 - Serde structs: derive `Deserialize` directly on runtime types (no separate DTO layer) — see `Package` in `catalog.rs`

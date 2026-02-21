@@ -41,12 +41,13 @@ impl Profile {
         }
     }
 
-    pub fn icon(self) -> &'static str {
+    /// Lucide icon codepoint for this profile.
+    pub fn icon(self) -> char {
         match self {
-            Profile::Personal => "\u{1F3E0}",
-            Profile::Work => "\u{1F4BC}",
-            Profile::Homelab => "\u{1F5A5}\u{FE0F}",
-            Profile::Manual => "\u{2699}\u{FE0F}",
+            Profile::Personal => '\u{e0f5}', // house
+            Profile::Work => '\u{e062}',     // briefcase
+            Profile::Homelab => '\u{e153}',  // server
+            Profile::Manual => '\u{e154}',   // settings
         }
     }
 }

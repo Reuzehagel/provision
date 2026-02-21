@@ -5,15 +5,17 @@ mod theme;
 use std::collections::HashSet;
 
 use iced::widget::{button, checkbox, column, container, row, scrollable, text, text_input};
-use iced::{Border, Color, Element, Length, Shadow, Size, Theme, padding};
+use iced::{Border, Color, Element, Length, Shadow, Size, Task, Theme, padding};
 
 use catalog::Package;
 use profile::Profile;
 
 fn main() -> iced::Result {
-    iced::application("Provision", App::update, App::view)
+    iced::application(App::new, App::update, App::view)
+        .title("Provision")
         .theme(App::theme)
         .window_size(Size::new(900.0, 600.0))
+        .font(iced_fonts::LUCIDE_FONT_BYTES)
         .run()
 }
 
@@ -25,15 +27,18 @@ struct App {
     search: String,
 }
 
-impl Default for App {
-    fn default() -> Self {
-        Self {
-            selected_profile: None,
-            screen: Screen::default(),
-            catalog: catalog::load_catalog(),
-            selected: HashSet::new(),
-            search: String::new(),
-        }
+impl App {
+    fn new() -> (Self, Task<Message>) {
+        (
+            Self {
+                selected_profile: None,
+                screen: Screen::default(),
+                catalog: catalog::load_catalog(),
+                selected: HashSet::new(),
+                search: String::new(),
+            },
+            Task::none(),
+        )
     }
 }
 
@@ -55,7 +60,7 @@ enum Message {
 const MUTED: Color = Color::from_rgb(0.55, 0.55, 0.58);
 
 impl App {
-    fn update(&mut self, message: Message) {
+    fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::ProfileSelected(profile) => {
                 self.selected_profile = Some(profile);
@@ -76,6 +81,7 @@ impl App {
                 self.search = value;
             }
         }
+        Task::none()
     }
 
     fn view(&self) -> Element<'_, Message> {
@@ -135,7 +141,7 @@ impl App {
         let search_lower = self.search.to_lowercase();
 
         let categories = catalog::categories(&self.catalog);
-        let mut pkg_list = column![].spacing(24);
+        let mut pkg_list = column![].spacing(24).width(Length::Fill);
 
         for cat in &categories {
             let cat_packages: Vec<&Package> = self
@@ -163,7 +169,8 @@ impl App {
                 let is_checked = self.selected.contains(&pkg.id);
                 let id = pkg.id.clone();
 
-                let cb = checkbox(&pkg.name, is_checked)
+                let cb = checkbox(is_checked)
+                    .label(&pkg.name)
                     .on_toggle(move |_| Message::TogglePackage(id.clone()))
                     .size(18)
                     .text_size(15);
@@ -177,7 +184,9 @@ impl App {
             pkg_list = pkg_list.push(cat_col);
         }
 
-        let scrollable_list = scrollable(pkg_list).height(Length::Fill);
+        let scrollable_list = scrollable(pkg_list)
+            .height(Length::Fill)
+            .width(Length::Fill);
 
         let count = self.selected.len();
         let footer = text(format!("{count} packages selected"))
@@ -200,7 +209,9 @@ impl App {
 fn profile_card(profile: Profile, selected: Option<Profile>) -> Element<'static, Message> {
     let is_selected = selected == Some(profile);
 
-    let icon = text(profile.icon()).size(32);
+    let icon = text(profile.icon())
+        .size(32)
+        .font(iced_fonts::LUCIDE_FONT);
     let title = text(profile.title()).size(20);
     let desc = text(profile.description()).size(14);
 
@@ -233,6 +244,7 @@ fn back_button_style(theme: &Theme, status: button::Status) -> button::Style {
             radius: 8.0.into(),
         },
         shadow: Shadow::default(),
+        snap: false,
     }
 }
 
@@ -271,5 +283,6 @@ fn card_style(theme: &Theme, status: button::Status, selected: bool) -> button::
             radius: 12.0.into(),
         },
         shadow: Shadow::default(),
+        snap: false,
     }
 }
