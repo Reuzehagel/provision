@@ -4,9 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is this?
 
-Provision is a Windows-native GUI tool that takes a fresh machine from "just installed" to "ready to use." Users pick a profile (Personal / Work / Homelab / Manual), customize a package list, and let it handle winget installs, WSL setup, and post-install steps. Built with Rust and Iced.
-
-See `IDEA.md` for the full design vision, package catalog spec, and planned flows.
+Windows provisioning GUI built with Rust and Iced. See `IDEA.md` for the full design vision.
 
 ## Workflow
 
@@ -24,13 +22,17 @@ cargo fmt --check    # check formatting
 
 No test suite yet. When tests exist, run with `cargo test`.
 
+If `cargo build` fails with "Access is denied", the binary is still running — kill with `taskkill //F //IM provision.exe`
+
 ## Architecture
 
 Iced (0.13) Elm-style architecture: **State → Message → Update → View**.
 
-- **`src/main.rs`** — `App` struct (state), `Message` enum, `Screen` enum (`ProfileSelect` → `PackageSelect`), `update()`/`view()` entry points. Standalone functions `profile_card()` and `card_style()` handle card rendering and styling.
-- **`src/profile.rs`** — `Profile` enum (Personal, Work, Homelab, Manual) with metadata methods (`title`, `description`, `icon`) and `Profile::ALL` constant.
+- **`src/main.rs`** — `App` struct (state with `catalog`, `selected`, `search`), `Message` enum, `Screen` enum (`ProfileSelect` → `PackageSelect`), `update()`/`view()` entry points. Standalone functions `profile_card()`, `card_style()`, `back_button_style()`.
+- **`src/catalog.rs`** — `Package` struct (derives `Deserialize`), `load_catalog()` (embeds `packages.toml` via `include_str!`), `default_selection()`, `category_display_name()`, `categories()`.
+- **`src/profile.rs`** — `Profile` enum (Personal, Work, Homelab, Manual) with metadata methods (`title`, `description`, `icon`, `slug`) and `Profile::ALL` constant.
 - **`src/theme.rs`** — Theme stub, currently re-exports `Theme::Dark`. Seam for future custom theming.
+- **`packages.toml`** — 68-package catalog (10 categories) embedded in the binary at compile time. Each entry has `id`, `name`, `description`, `category`, `winget_id`, `profiles`, and optional `post_install`/`install_command`.
 
 Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*` method on `App`.
 
@@ -44,3 +46,6 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 - Profile cards are `button` widgets wrapping `column` layouts, styled with closures passed to `.style()`
 - Center content in a screen: `container(content).center_x(Length::Fill).center_y(Length::Fill)`
 - `MUTED` constant (`Color::from_rgb(0.55, 0.55, 0.58)`) for secondary/subtitle text
+- Iced 0.13 `Padding` does NOT support `[_; 4]` arrays — use `padding::left(n)`, `padding::top(n)`, etc. for directional padding
+- Button styles: extract to standalone functions (`card_style`, `back_button_style`) when reusable; inline closures only for one-offs
+- Serde structs: derive `Deserialize` directly on runtime types (no separate DTO layer) — see `Package` in `catalog.rs`

@@ -32,6 +32,15 @@ impl Profile {
         }
     }
 
+    pub fn slug(self) -> &'static str {
+        match self {
+            Profile::Personal => "personal",
+            Profile::Work => "work",
+            Profile::Homelab => "homelab",
+            Profile::Manual => "manual",
+        }
+    }
+
     pub fn icon(self) -> &'static str {
         match self {
             Profile::Personal => "\u{1F3E0}",
