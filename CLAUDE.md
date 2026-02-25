@@ -29,11 +29,14 @@ If `cargo build` fails with "Access is denied", the binary is still running — 
 
 Iced (0.14) Elm-style architecture: **State → Message → Update → View**.
 
-- **`src/main.rs`** — `App` struct, `Message` enum, `Screen` enum (`ProfileSelect` → `PackageSelect` → `Review` → `Installing`), `update()`/`view()` entry points. Standalone functions `profile_card()`, `screen_header()`, `card_style()`, `back_button_style()`, `continue_button_style()`, `terminal_box_style()`.
+- **`src/main.rs`** — `App` struct, `Message` enum, `Screen` enum, `ProgressState`, `UpdateScanState`, `update()` logic, `view()` dispatch. No view or style code.
+- **`src/views.rs`** — All `view_*` methods (as `impl App`), standalone helpers `terminal_log_box()`, `view_progress_screen()`, `screen_header()`, `profile_card()`, `ProgressLabels`.
+- **`src/styles.rs`** — Color constants (`MUTED`, `STATUS_*`), icon codepoints (`ICON_*`), button/card/terminal style functions. `continue_button_style` and `cancel_button_style` share a `colored_button_style` helper.
 - **`src/install.rs`** — Install engine. `PackageStatus`/`InstallProgress` enums, `install_all()` returns a stream via `iced::stream::channel`. Reads raw bytes from process stdout with mini terminal emulator (handles `\r`, `\n`, ANSI escapes). Classifies output as `Log` (meaningful) vs `Activity` (transient spinners/progress).
+- **`src/upgrade.rs`** — Upgrade engine. `UpgradeablePackage` struct, `ScanProgress` enum, `scan_upgrades()` streams winget scan output, `parse_upgrade_table()` parses column-aligned winget output, `upgrade_all()` streams per-package upgrades.
 - **`src/catalog.rs`** — `Package` struct (derives `Deserialize`), `load_catalog()` (embeds `packages.toml` via `include_str!`), `default_selection()`, `category_display_name()`, `categories()`.
 - **`src/profile.rs`** — `Profile` enum (Personal, Work, Homelab, Manual) with metadata methods (`title`, `description`, `icon`, `slug`) and `Profile::ALL` constant.
-- **`src/theme.rs`** — Theme stub, currently re-exports `Theme::Dark`. Seam for future custom theming.
+- **`src/theme.rs`** — Theme stub, returns `Theme::Dark`. Seam for future custom theming.
 - **`packages.toml`** — 68-package catalog (10 categories) embedded in the binary at compile time. Each entry has `id`, `name`, `description`, `category`, `winget_id`, `profiles`, and optional `post_install`/`install_command`.
 
 Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*` method on `App`.
@@ -47,11 +50,11 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 - `button::Style::text_color` overrides `.color()` on child text widgets — set description contrast via background color choices, not text color overrides
 - Profile cards are `button` widgets wrapping `column` layouts, styled with closures passed to `.style()`
 - Center content in a screen: `container(content).center_x(Length::Fill).center_y(Length::Fill)`
-- Named color constants for repeated colors: `MUTED`, `TERMINAL_TEXT`, `STATUS_BLUE`, `STATUS_GREEN`, `STATUS_RED` — prefer constants over inline `Color::from_rgb(...)` when used more than once
+- Named color constants live in `styles.rs`: `MUTED`, `TERMINAL_TEXT`, `STATUS_BLUE`, `STATUS_GREEN`, `STATUS_RED`, `STATUS_AMBER` — prefer constants over inline `Color::from_rgb(...)` when used more than once
 - Iced `Padding` does NOT support `[_; 4]` arrays — use `padding::left(n)`, `padding::top(n)`, etc. for directional padding
 - `checkbox(bool)` builder pattern — use `.label()` and `.on_toggle()`, no positional label arg
 - `button::Style` requires `snap: false` field in struct literals
-- **Icons**: Lucide icons via `iced_fonts` crate (feature `"lucide"`). Use `text(char).font(iced_fonts::LUCIDE_FONT)`. Codepoints in `profile.rs`. Emoji chars do NOT render in Iced — always use an icon font.
+- **Icons**: Lucide icons via `iced_fonts` crate (feature `"lucide"`). Use `text(char).font(iced_fonts::LUCIDE_FONT)`. Codepoints in `styles.rs`. Emoji chars do NOT render in Iced — always use an icon font.
 - Load icon fonts via `.font(iced_fonts::LUCIDE_FONT_BYTES)` on the application builder
 - Scrollable content needs explicit `width(Length::Fill)` on inner column or it shrink-wraps
 - Button styles: extract to standalone functions (`card_style`, `back_button_style`) when reusable; inline closures only for one-offs
@@ -63,5 +66,6 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 - **`iced::stream::channel`** needs explicit sender type: `|mut sender: futures::channel::mpsc::Sender<T>|`
 - **`futures` crate**: Not a direct dep — use `iced::futures` and `iced::futures::SinkExt as _` for the re-export
 - **Layout stability**: Always render buttons (disabled state) rather than conditionally adding/removing — avoids layout shifts when state changes
-- **Spawning processes on Windows**: Use `tokio::process::Command` with `.creation_flags(0x08000000)` (`CREATE_NO_WINDOW`) to prevent console windows flashing
+- **Spawning processes on Windows**: Use `tokio::process::Command` with `.creation_flags(0x08000000)` (`CREATE_NO_WINDOW`) to prevent console windows flashing. Use `.stderr(Stdio::null())` unless you consume stderr — piped-but-unread stderr deadlocks when the buffer fills.
+- **UTF-8 safe slicing**: When slicing strings at byte offsets (e.g. parsing winget column-aligned tables), snap to char boundaries with `str::is_char_boundary()` — multi-byte chars like `…` cause panics
 - **Winget piped output**: Winget outputs spinner frames as individual `\r\n` lines when piped. Read raw bytes and classify transient vs meaningful output — don't use `lines()` reader

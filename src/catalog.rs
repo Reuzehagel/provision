@@ -5,7 +5,6 @@ use serde::Deserialize;
 use crate::profile::Profile;
 
 #[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
 pub struct Package {
     pub id: String,
     pub name: String,

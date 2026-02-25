@@ -1,5 +1,3 @@
-pub use iced::Theme;
-
-pub fn default() -> Theme {
-    Theme::Dark
+pub fn default() -> iced::Theme {
+    iced::Theme::Dark
 }
