@@ -7,5 +7,8 @@ edition = "2024"
 iced = { version = "0.14", features = ["canvas", "tokio"] }
 iced_fonts = { version = "0.3", features = ["lucide"] }
 serde = { version = "1", features = ["derive"] }
-tokio = { version = "1", features = ["process", "io-util"] }
+tokio = { version = "1", features = ["process", "io-util", "time"] }
 toml = "0.8"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_UI_Shell", "Win32_Foundation"] }

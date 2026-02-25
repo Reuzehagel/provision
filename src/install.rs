@@ -14,6 +14,7 @@ pub enum PackageStatus {
     Installing,
     Done,
     Failed(String),
+    Cancelled,
 }
 
 #[derive(Debug, Clone)]
@@ -43,10 +44,43 @@ pub enum InstallProgress {
     Completed,
 }
 
-pub fn install_all(packages: Vec<Package>) -> impl futures::Stream<Item = InstallProgress> + Send {
+pub fn install_all(
+    packages: Vec<Package>,
+    dry_run: bool,
+) -> impl futures::Stream<Item = InstallProgress> + Send {
     stream::channel(100, move |mut sender: Sender| async move {
         for (i, pkg) in packages.iter().enumerate() {
             let _ = sender.send(InstallProgress::Started { index: i }).await;
+
+            if dry_run {
+                let cmd_desc = if let Some(ref custom) = pkg.install_command {
+                    format!("cmd /C {custom}")
+                } else if let Some(ref winget_id) = pkg.winget_id {
+                    format!("winget install --id {winget_id} -e")
+                } else {
+                    "No install method defined".into()
+                };
+
+                let _ = sender
+                    .send(InstallProgress::Log {
+                        index: i,
+                        line: format!("[DRY RUN] Would run: {cmd_desc}"),
+                    })
+                    .await;
+
+                if let Some(ref post) = pkg.post_install {
+                    let _ = sender
+                        .send(InstallProgress::Log {
+                            index: i,
+                            line: format!("[DRY RUN] Would run post-install: {post}"),
+                        })
+                        .await;
+                }
+
+                tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                let _ = sender.send(InstallProgress::Succeeded { index: i }).await;
+                continue;
+            }
 
             let (program, args) = if let Some(ref custom) = pkg.install_command {
                 ("cmd".to_string(), vec!["/C".to_string(), custom.clone()])

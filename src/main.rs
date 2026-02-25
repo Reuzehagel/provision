@@ -14,8 +14,57 @@ use catalog::Package;
 use install::PackageStatus;
 use profile::Profile;
 
+#[cfg(not(debug_assertions))]
+fn ensure_elevated() {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::UI::Shell::{IsUserAnAdmin, ShellExecuteW};
+
+    unsafe {
+        if IsUserAnAdmin() != 0 {
+            return;
+        }
+
+        let exe: Vec<u16> = std::env::current_exe()
+            .unwrap_or_default()
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+
+        let args: String = std::env::args().skip(1).collect::<Vec<_>>().join(" ");
+        let args_w: Vec<u16> = args.encode_utf16().chain(std::iter::once(0)).collect();
+
+        let verb: Vec<u16> = "runas\0".encode_utf16().collect();
+
+        let result = ShellExecuteW(
+            HWND::default(),
+            verb.as_ptr(),
+            exe.as_ptr(),
+            args_w.as_ptr(),
+            std::ptr::null(),
+            1, // SW_SHOWNORMAL
+        );
+
+        // ShellExecuteW returns > 32 on success
+        if result as usize > 32 {
+            std::process::exit(0);
+        }
+
+        // UAC declined — print warning and continue unelevated
+        eprintln!("Warning: running without admin privileges. Some packages may fail to install.");
+    }
+}
+
+#[cfg(debug_assertions)]
+fn ensure_elevated() {}
+
 fn main() -> iced::Result {
-    iced::application(App::new, App::update, App::view)
+    ensure_elevated();
+
+    let dry_run = std::env::args().any(|a| a == "--dry");
+
+    iced::application(move || App::new(dry_run), App::update, App::view)
         .title("Provision")
         .theme(App::theme)
         .window_size(Size::new(900.0, 600.0))
@@ -24,6 +73,7 @@ fn main() -> iced::Result {
 }
 
 struct App {
+    dry_run: bool,
     selected_profile: Option<Profile>,
     screen: Screen,
     catalog: Vec<Package>,
@@ -40,9 +90,10 @@ struct App {
 }
 
 impl App {
-    fn new() -> (Self, Task<Message>) {
+    fn new(dry_run: bool) -> (Self, Task<Message>) {
         (
             Self {
+                dry_run,
                 selected_profile: None,
                 screen: Screen::default(),
                 catalog: catalog::load_catalog(),
@@ -78,6 +129,7 @@ enum Message {
     SearchChanged(String),
     GoToReview,
     StartInstall,
+    CancelInstall,
     InstallProgress(install::InstallProgress),
     FinishAndReset,
 }
@@ -87,6 +139,7 @@ const TERMINAL_TEXT: Color = Color::from_rgb(0.7, 0.7, 0.7);
 const STATUS_BLUE: Color = Color::from_rgb(0.3, 0.6, 1.0);
 const STATUS_GREEN: Color = Color::from_rgb(0.3, 0.8, 0.4);
 const STATUS_RED: Color = Color::from_rgb(0.9, 0.3, 0.3);
+const STATUS_AMBER: Color = Color::from_rgb(1.0, 0.75, 0.2);
 
 // Lucide icon codepoints
 const ICON_CIRCLE: char = '\u{e098}';
@@ -141,12 +194,28 @@ impl App {
                 self.install_done = false;
                 self.screen = Screen::Installing;
 
+                let dry = self.dry_run;
                 let (task, handle) =
-                    Task::run(install::install_all(queue), Message::InstallProgress).abortable();
+                    Task::run(install::install_all(queue, dry), Message::InstallProgress)
+                        .abortable();
 
                 self._install_handle = Some(handle.abort_on_drop());
 
                 return task;
+            }
+            Message::CancelInstall => {
+                // Drop the handle to abort the install stream
+                self._install_handle = None;
+                for s in &mut self.install_statuses {
+                    if matches!(s, PackageStatus::Installing | PackageStatus::Pending) {
+                        *s = PackageStatus::Cancelled;
+                    }
+                }
+                self.install_done = true;
+                self.install_live_line.clear();
+                self.install_log.push(String::new());
+                self.install_log
+                    .push("--- Installation cancelled ---".into());
             }
             Message::InstallProgress(event) => match event {
                 install::InstallProgress::Started { index } => {
@@ -434,9 +503,26 @@ impl App {
             .iter()
             .filter(|s| matches!(s, PackageStatus::Failed(_)))
             .count();
+        let cancelled_count = self
+            .install_statuses
+            .iter()
+            .filter(|s| matches!(s, PackageStatus::Cancelled))
+            .count();
 
         let heading = if self.install_done {
-            text("Installation Complete").size(28)
+            let label = match (self.dry_run, cancelled_count > 0) {
+                (true, true) => "Dry Run Cancelled",
+                (true, false) => "Dry Run Complete",
+                (false, true) => "Installation Cancelled",
+                (false, false) => "Installation Complete",
+            };
+            text(label).size(28)
+        } else if self.dry_run {
+            text(format!(
+                "[DRY RUN] Installing {} of {total}...",
+                self.install_current + 1
+            ))
+            .size(28)
         } else {
             text(format!(
                 "Installing {} of {total}...",
@@ -446,9 +532,18 @@ impl App {
         };
 
         let subtitle = if self.install_done {
-            text(format!("{done_count} succeeded, {failed_count} failed"))
+            let mut parts = vec![
+                format!("{done_count} succeeded"),
+                format!("{failed_count} failed"),
+            ];
+            if cancelled_count > 0 {
+                parts.push(format!("{cancelled_count} cancelled"));
+            }
+            text(parts.join(", ")).size(15).color(MUTED)
+        } else if self.dry_run {
+            text("No packages will actually be installed")
                 .size(15)
-                .color(MUTED)
+                .color(STATUS_AMBER)
         } else {
             let name = self
                 .install_queue
@@ -461,7 +556,7 @@ impl App {
         };
 
         // Progress bar
-        let completed = (done_count + failed_count) as f32;
+        let completed = (done_count + failed_count + cancelled_count) as f32;
         let progress = progress_bar(0.0..=total as f32, completed);
 
         // Package list with status icons
@@ -472,6 +567,7 @@ impl App {
                 PackageStatus::Installing => (ICON_LOADER, STATUS_BLUE, "Installing...".into()),
                 PackageStatus::Done => (ICON_CIRCLE_CHECK, STATUS_GREEN, "Done".into()),
                 PackageStatus::Failed(e) => (ICON_CIRCLE_X, STATUS_RED, format!("Failed: {e}")),
+                PackageStatus::Cancelled => (ICON_CIRCLE_X, STATUS_AMBER, "Cancelled".into()),
             };
 
             let icon = text(icon_char)
@@ -524,14 +620,26 @@ impl App {
         .width(Length::Fill);
 
         // Footer — always rendered to avoid layout shift
+        let mut cancel_btn = button(text("Cancel").size(15))
+            .style(cancel_button_style)
+            .padding([10, 28]);
+        if !self.install_done {
+            cancel_btn = cancel_btn.on_press(Message::CancelInstall);
+        }
+
         let mut done_btn = button(text("Done").size(15))
             .style(continue_button_style)
             .padding([10, 28]);
         if self.install_done {
             done_btn = done_btn.on_press(Message::FinishAndReset);
         }
-        let footer =
-            row![iced::widget::Space::new().width(Length::Fill), done_btn].width(Length::Fill);
+
+        let footer = row![
+            cancel_btn,
+            iced::widget::Space::new().width(Length::Fill),
+            done_btn
+        ]
+        .width(Length::Fill);
 
         let content = column![
             heading,
@@ -611,6 +719,31 @@ fn back_button_style(theme: &Theme, status: button::Status) -> button::Style {
 fn continue_button_style(_theme: &Theme, status: button::Status) -> button::Style {
     let base = Color::from_rgb(0.24, 0.50, 0.96);
     let hover = Color::from_rgb(0.30, 0.56, 1.0);
+    let disabled = Color::from_rgb(0.2, 0.2, 0.24);
+
+    let (bg, text_color) = match status {
+        button::Status::Hovered => (hover, Color::WHITE),
+        button::Status::Pressed => (base, Color::WHITE),
+        button::Status::Disabled => (disabled, MUTED),
+        button::Status::Active => (base, Color::WHITE),
+    };
+
+    button::Style {
+        background: Some(iced::Background::Color(bg)),
+        text_color,
+        border: Border {
+            color: Color::TRANSPARENT,
+            width: 0.0,
+            radius: 8.0.into(),
+        },
+        shadow: Shadow::default(),
+        snap: false,
+    }
+}
+
+fn cancel_button_style(_theme: &Theme, status: button::Status) -> button::Style {
+    let base = Color::from_rgb(0.7, 0.2, 0.2);
+    let hover = Color::from_rgb(0.85, 0.25, 0.25);
     let disabled = Color::from_rgb(0.2, 0.2, 0.24);
 
     let (bg, text_color) = match status {
