@@ -8,8 +8,7 @@ Windows provisioning GUI built with Rust and Iced. See `DESIGN.md` for design sy
 
 ## Workflow
 
-- Use `/commit` skill when asked to commit
-- Use `/run-check` skill after making code changes — runs `cargo build`, `clippy`, and `fmt --check` in sequence
+- **After making any code changes, always run `just check`** — runs `cargo build`, `clippy`, and `fmt --check` in sequence
 
 ## Build & Run
 
@@ -36,7 +35,7 @@ Iced (0.14) Elm-style architecture: **State → Message → Update → View**.
 - **`src/install.rs`** — Install engine. `PackageStatus`/`InstallProgress` enums, `install_all()` returns a stream via `iced::stream::channel`. Reads raw bytes from process stdout with mini terminal emulator (handles `\r`, `\n`, ANSI escapes). Classifies output as `Log` (meaningful) vs `Activity` (transient spinners/progress).
 - **`src/upgrade.rs`** — Upgrade & installed-detection engine. `UpgradeablePackage`/`InstalledPackage` structs, `ScanProgress`/`InstalledScanProgress` enums, `scan_upgrades()`/`scan_installed()` stream winget output, `parse_upgrade_table()`/`parse_list_table()` parse column-aligned tables, `upgrade_all()` streams per-package upgrades.
 - **`src/catalog.rs`** — `Package` struct (derives `Deserialize`), `load_catalog()` (embeds `packages.toml` via `include_str!`), `default_selection()`, `category_display_name()`, `categories()`.
-- **`src/profile.rs`** — `Profile` enum (Personal, Work, Homelab, Manual) with metadata methods (`title`, `description`, `icon`, `slug`) and `Profile::ALL` constant.
+- **`src/profile.rs`** — `Profile` enum (Personal, Work, Manual) with metadata methods (`title`, `description`, `icon`, `slug`) and `Profile::ALL` constant.
 - **`src/theme.rs`** — Custom theme via `Theme::custom("provision", Palette { ... })` with Tailwind zinc neutrals and blue/emerald/red/amber accents.
 - **`packages.toml`** — 73-package catalog (10 categories) embedded in the binary at compile time. Each entry has `id`, `name`, `description`, `category`, `winget_id`, `profiles`, and optional `post_install`/`install_command`.
 - **`DESIGN.md`** — Design system reference (color tokens, spacing, component patterns). **`design-system.html`** — Browser-viewable version; open to compare tokens against the Iced implementation.

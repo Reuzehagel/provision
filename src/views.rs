@@ -38,11 +38,11 @@ impl App {
             .spacing(8)
             .align_x(iced::Alignment::Center);
 
-        // Profile cards — 2x2 grid, horizontal layout
-        let [a, b, c, d] = Profile::ALL.map(|p| profile_card(p, self.selected_profile));
+        // Profile cards — top row: Personal + Work; bottom row: Manual (full width)
+        let [a, b, c] = Profile::ALL.map(|p| profile_card(p, self.selected_profile));
 
         let top_row = row![a, b].spacing(10).width(Length::Fill);
-        let bottom_row = row![c, d].spacing(10).width(Length::Fill);
+        let bottom_row = row![c].spacing(10).width(Length::Fill);
 
         let grid = column![top_row, bottom_row].spacing(10).width(Length::Fill);
 

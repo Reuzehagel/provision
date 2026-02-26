@@ -6,7 +6,7 @@ A GUI tool that takes a fresh Windows machine from "just installed" to "ready to
 
 You reinstall Windows, or get a new machine. Normally you spend the next hour opening Edge, googling "Firefox download", installing it, then googling "VS Code download", and so on — twenty, thirty, forty times. You forget half the tools you used to have.
 
-Provision fixes that. Tell it what kind of machine this is — personal, work, homelab — and it pre-selects a sensible set of packages. Tweak the list, hit go, walk away. It handles winget installs, WSL setup, and post-install steps (like installing Bun after Node).
+Provision fixes that. Tell it what kind of machine this is — personal or work — and it pre-selects a sensible set of packages. Tweak the list, hit go, walk away. It handles winget installs, WSL setup, and post-install steps (like installing Bun after Node).
 
 ## Install
 
@@ -16,7 +16,7 @@ Download the latest release from the [Releases](../../releases) page and run the
 
 ## Usage
 
-1. **Pick a profile** — Personal, Work, Homelab, or Manual. Each pre-selects a curated package set.
+1. **Pick a profile** — Personal, Work, or Manual. Each pre-selects a curated package set.
 2. **Browse & customize** — See all available packages by category. Toggle what you want.
 3. **Review** — See exactly what's about to be installed.
 4. **Install** — Hit go and watch the live output. Walk away when done.
@@ -46,7 +46,6 @@ Profiles are curated default selections — you can always add or remove anythin
 
 - **Personal** — browsers, communication, multimedia, utilities
 - **Work** — development tools, documents, communication
-- **Homelab** — servers, networking, system tools
 - **Manual** — start from scratch, select everything yourself
 
 ## Building from source
