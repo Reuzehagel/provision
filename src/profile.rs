@@ -41,13 +41,14 @@ impl Profile {
         }
     }
 
-    /// Lucide icon codepoint for this profile.
+    /// Lucide icon for this profile.
     pub fn icon(self) -> char {
+        use lucide_icons::Icon;
         match self {
-            Profile::Personal => '\u{e0f5}', // house
-            Profile::Work => '\u{e062}',     // briefcase
-            Profile::Homelab => '\u{e153}',  // server
-            Profile::Manual => '\u{e154}',   // settings
+            Profile::Personal => char::from(Icon::House),
+            Profile::Work => char::from(Icon::Briefcase),
+            Profile::Homelab => char::from(Icon::Server),
+            Profile::Manual => char::from(Icon::Settings),
         }
     }
 }

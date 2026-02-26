@@ -1201,29 +1201,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "iced_fonts"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "214cff7c8499e328774216690e58e315a1a5f8f6fdd1035aed6298e62ffc4c1d"
-dependencies = [
- "iced_core",
- "iced_fonts_macros",
- "iced_widget",
-]
-
-[[package]]
-name = "iced_fonts_macros"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ef5125e110cb19cd1910a28298661c98c5d9ab02eef43594968352940e8752e"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
- "ttf-parser",
-]
-
-[[package]]
 name = "iced_futures"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1550,6 +1527,12 @@ name = "lru"
 version = "0.16.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1dc47f592c06f33f8e3aea9591776ec7c9f9e4124778ff8a3c3b87159f7e593"
+
+[[package]]
+name = "lucide-icons"
+version = "0.572.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c32cf63896ca714f01eef04df16867d9b28bbdf0a6cc59eb07de6084e538832"
 
 [[package]]
 name = "lyon"
@@ -2342,7 +2325,7 @@ name = "provision"
 version = "0.1.0"
 dependencies = [
  "iced",
- "iced_fonts",
+ "lucide-icons",
  "serde",
  "tokio",
  "toml",

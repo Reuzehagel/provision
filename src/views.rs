@@ -6,90 +6,152 @@ use iced::{Element, Length, Theme, padding};
 use crate::catalog::{self, Package};
 use crate::install::PackageStatus;
 use crate::profile::Profile;
+use lucide_icons::Icon;
+
 use crate::styles::{
-    ICON_CIRCLE, ICON_CIRCLE_CHECK, ICON_CIRCLE_X, ICON_LOADER, MUTED, STATUS_AMBER, STATUS_BLUE,
-    STATUS_GREEN, STATUS_RED, TERMINAL_TEXT, back_button_style, cancel_button_style, card_style,
-    continue_button_style, installed_badge_style, terminal_box_style,
+    LUCIDE_FONT, MUTED, MUTED_FG, STATUS_AMBER, STATUS_BLUE, STATUS_GREEN, STATUS_RED,
+    TERMINAL_TEXT, cancel_button_style, card_style, continue_button_style, divider_style,
+    ghost_button_style, ghost_icon_button_style, icon_box_style, installed_badge_style,
+    package_checkbox_style, terminal_box_style, update_card_style, warning_badge_style,
 };
 use crate::{App, Message, ProgressState};
 
 impl App {
     pub(crate) fn view_profile_select(&self) -> Element<'_, Message> {
-        let title = text("Provision").size(40);
-        let subtitle = text("Choose a profile to get started")
-            .size(16)
-            .color(MUTED);
+        // Logo icon box
+        let logo_icon = text(char::from(Icon::Package))
+            .size(20)
+            .font(LUCIDE_FONT)
+            .color(STATUS_BLUE);
+        let logo_box = container(logo_icon)
+            .style(icon_box_style)
+            .padding(12)
+            .center_x(44)
+            .center_y(44);
 
+        let title = text("Provision").size(24);
+        let subtitle = text("Select a profile to get started")
+            .size(14)
+            .color(MUTED_FG);
+
+        let heading_cluster = column![logo_box, title, subtitle]
+            .spacing(8)
+            .align_x(iced::Alignment::Center);
+
+        // Profile cards — 2x2 grid, horizontal layout
         let [a, b, c, d] = Profile::ALL.map(|p| profile_card(p, self.selected_profile));
 
-        let top_row = row![a, b].spacing(16);
-        let bottom_row = row![c, d].spacing(16);
+        let top_row = row![a, b].spacing(10).width(Length::Fill);
+        let bottom_row = row![c, d].spacing(10).width(Length::Fill);
 
-        let grid = column![top_row, bottom_row].spacing(16);
+        let grid = column![top_row, bottom_row].spacing(10).width(Length::Fill);
 
-        // Update card — full width below the profile grid
-        let update_icon = text('\u{e14b}') // refresh-cw
-            .size(24)
-            .font(iced_fonts::LUCIDE_FONT);
-        let update_title = text("Update").size(18);
-        let update_desc = text("Check for outdated packages and upgrade them")
+        // Divider
+        let divider = container(iced::widget::Space::new().height(1))
+            .style(divider_style)
+            .width(Length::Fill)
+            .height(1);
+
+        // Update row — subtle card
+        let update_icon = text(char::from(Icon::RefreshCw))
+            .size(15)
+            .font(LUCIDE_FONT)
+            .color(MUTED);
+        let update_text = text("Check for updates").size(14).color(MUTED_FG);
+        let chevron = text(char::from(Icon::ChevronRight))
             .size(14)
+            .font(LUCIDE_FONT)
             .color(MUTED);
 
-        let update_content = row![update_icon, column![update_title, update_desc].spacing(4)]
-            .spacing(16)
-            .align_y(iced::Alignment::Center)
-            .padding(20)
-            .width(Length::Fill);
+        let update_content = row![
+            update_icon,
+            update_text,
+            iced::widget::Space::new().width(Length::Fill),
+            chevron,
+        ]
+        .spacing(12)
+        .align_y(iced::Alignment::Center)
+        .padding([14, 16])
+        .width(Length::Fill);
 
         let update_card = button(update_content)
             .on_press(Message::StartUpdateScan)
             .width(Length::Fill)
-            .style(move |theme: &Theme, status| card_style(theme, status, false));
+            .style(update_card_style);
 
+        // Scan status
         let scan_status: Element<'_, Message> = if self.installed_scan_done {
             let count = self.installed.len();
-            text(format!("{count} installed packages detected"))
-                .size(13)
-                .color(MUTED)
-                .into()
+            row![
+                text(char::from(Icon::Check))
+                    .size(12)
+                    .font(LUCIDE_FONT)
+                    .color(MUTED),
+                text(format!("{count} packages detected"))
+                    .size(12)
+                    .color(MUTED),
+            ]
+            .spacing(4)
+            .align_y(iced::Alignment::Center)
+            .into()
         } else {
             row![
-                text(ICON_LOADER)
-                    .size(14)
-                    .font(iced_fonts::LUCIDE_FONT)
+                text(char::from(Icon::Loader))
+                    .size(12)
+                    .font(LUCIDE_FONT)
                     .color(MUTED),
-                text("Scanning installed packages...").size(13).color(MUTED),
+                text("Scanning installed packages...").size(12).color(MUTED),
             ]
-            .spacing(6)
+            .spacing(4)
             .align_y(iced::Alignment::Center)
             .into()
         };
 
-        let content = column![title, subtitle, scan_status, grid, update_card]
-            .spacing(24)
-            .align_x(iced::Alignment::Center);
+        let content = column![heading_cluster, grid, divider, update_card, scan_status]
+            .spacing(14)
+            .align_x(iced::Alignment::Center)
+            .max_width(500);
 
         container(content)
             .center_x(Length::Fill)
             .center_y(Length::Fill)
-            .padding(40)
+            .padding(32)
             .into()
     }
 
     pub(crate) fn view_package_select(&self) -> Element<'_, Message> {
         let profile = self.selected_profile.unwrap_or(Profile::Manual);
-        let header = screen_header(format!("{} \u{2014} Package Selection", profile.title()));
 
-        let search_field = text_input("Search packages...", &self.search)
+        // Header: icon-only back + heading + spacer + search
+        let back_icon = text(char::from(Icon::ChevronLeft))
+            .size(18)
+            .font(LUCIDE_FONT);
+        let back_btn = button(back_icon)
+            .on_press(Message::GoBack)
+            .style(ghost_icon_button_style)
+            .padding([6, 8]);
+
+        let heading = text(profile.title()).size(18);
+
+        let search_field = text_input("Search...", &self.search)
             .on_input(Message::SearchChanged)
-            .padding(10)
-            .size(16);
+            .padding(8)
+            .size(14)
+            .width(200);
+
+        let header = row![
+            back_btn,
+            heading,
+            iced::widget::Space::new().width(Length::Fill),
+            search_field,
+        ]
+        .spacing(10)
+        .align_y(iced::Alignment::Center);
 
         let search_lower = self.search.to_lowercase();
 
         let categories = catalog::categories(&self.catalog);
-        let mut pkg_list = column![].spacing(24).width(Length::Fill);
+        let mut pkg_list = column![].spacing(18).width(Length::Fill);
 
         for cat in &categories {
             let cat_packages: Vec<&Package> = self
@@ -107,47 +169,43 @@ impl App {
                 continue;
             }
 
-            let cat_label = text(catalog::category_display_name(cat).to_uppercase())
-                .size(13)
-                .color(MUTED);
+            // Count selected in this category
+            let selected_count = cat_packages
+                .iter()
+                .filter(|p| self.selected.contains(&p.id))
+                .count();
+            let total_count = cat_packages.len();
 
-            let mut cat_col = column![cat_label].spacing(8);
+            let cat_label_text = format!(
+                "{} \u{2014} {}/{}",
+                catalog::category_display_name(cat).to_uppercase(),
+                selected_count,
+                total_count,
+            );
+            let cat_label = text(cat_label_text).size(11).color(MUTED_FG);
 
-            for pkg in cat_packages {
-                let is_checked = self.selected.contains(&pkg.id);
-                let id = pkg.id.clone();
+            // Split packages into left/right columns
+            let half = cat_packages.len().div_ceil(2);
+            let left_pkgs = &cat_packages[..half];
+            let right_pkgs = &cat_packages[half..];
 
-                let installed = self.is_installed(pkg);
+            let mut left_col = column![].spacing(2);
+            let mut right_col = column![].spacing(2);
 
-                let cb = checkbox(is_checked)
-                    .label(&pkg.name)
-                    .on_toggle(move |_| Message::TogglePackage(id.clone()))
-                    .size(18)
-                    .text_size(15);
-
-                let pkg_row: Element<'_, Message> = if installed {
-                    let badge_label = text("Installed").size(11).color(STATUS_GREEN);
-                    let badge = container(badge_label)
-                        .style(installed_badge_style)
-                        .padding([2, 8]);
-                    row![cb, badge]
-                        .spacing(10)
-                        .align_y(iced::Alignment::Center)
-                        .into()
-                } else {
-                    cb.into()
-                };
-
-                let desc_text = match self.installed_version(pkg) {
-                    Some(ver) => format!("{} (v{ver})", pkg.description),
-                    None => pkg.description.clone(),
-                };
-
-                let desc =
-                    container(text(desc_text).size(13).color(MUTED)).padding(padding::left(30));
-
-                cat_col = cat_col.push(pkg_row).push(desc);
+            for pkg in left_pkgs {
+                left_col = left_col.push(package_row(pkg, self));
             }
+            for pkg in right_pkgs {
+                right_col = right_col.push(package_row(pkg, self));
+            }
+
+            let two_col = row![
+                left_col.width(Length::FillPortion(1)),
+                right_col.width(Length::FillPortion(1)),
+            ]
+            .spacing(32);
+
+            let cat_col = column![cat_label, two_col].spacing(6);
 
             pkg_list = pkg_list.push(cat_col);
         }
@@ -156,6 +214,7 @@ impl App {
             .height(Length::Fill)
             .width(Length::Fill);
 
+        // Footer
         let count = self.selected.len();
         let installed_selected = self
             .catalog
@@ -163,15 +222,15 @@ impl App {
             .filter(|p| self.selected.contains(&p.id) && self.is_installed(p))
             .count();
         let footer_label = if installed_selected > 0 {
-            format!("{count} selected ({installed_selected} already installed)")
+            format!("{count} selected \u{00b7} {installed_selected} installed")
         } else {
-            format!("{count} packages selected")
+            format!("{count} selected")
         };
-        let footer_text = text(footer_label).size(14).color(MUTED);
+        let footer_text = text(footer_label).size(13).color(MUTED);
 
-        let mut continue_btn = button(text("Continue").size(15))
+        let mut continue_btn = button(text("Continue").size(14))
             .style(continue_button_style)
-            .padding([10, 28]);
+            .padding([8, 20]);
         if count > 0 {
             continue_btn = continue_btn.on_press(Message::GoToReview);
         }
@@ -179,25 +238,37 @@ impl App {
         let footer = row![
             footer_text,
             iced::widget::Space::new().width(Length::Fill),
-            continue_btn
+            continue_btn,
         ]
         .align_y(iced::Alignment::Center);
 
-        let content = column![header, search_field, scrollable_list, footer]
-            .spacing(16)
+        let content = column![header, scrollable_list, footer]
+            .spacing(14)
             .width(Length::Fill)
             .height(Length::Fill);
 
         container(content)
             .width(Length::Fill)
             .height(Length::Fill)
-            .padding(40)
+            .padding(28)
             .into()
     }
 
     pub(crate) fn view_review(&self) -> Element<'_, Message> {
-        let profile = self.selected_profile.unwrap_or(Profile::Manual);
-        let header = screen_header(format!("{} \u{2014} Review", profile.title()));
+        // Header: icon-only back + "Review"
+        let back_icon = text(char::from(Icon::ChevronLeft))
+            .size(18)
+            .font(LUCIDE_FONT);
+        let back_btn = button(back_icon)
+            .on_press(Message::GoBack)
+            .style(ghost_icon_button_style)
+            .padding([6, 8]);
+
+        let heading = text("Review").size(18);
+
+        let header = row![back_btn, heading]
+            .spacing(10)
+            .align_y(iced::Alignment::Center);
 
         let queue: Vec<&Package> = self
             .catalog
@@ -208,16 +279,17 @@ impl App {
         let reinstall_count = queue.iter().filter(|p| self.is_installed(p)).count();
         let subtitle_text = if reinstall_count > 0 {
             format!(
-                "{} packages will be installed ({reinstall_count} already installed)",
-                queue.len()
+                "{} packages \u{00b7} {} already installed",
+                queue.len(),
+                reinstall_count,
             )
         } else {
-            format!("{} packages will be installed", queue.len())
+            format!("{} packages", queue.len())
         };
-        let subtitle = text(subtitle_text).size(15).color(MUTED);
+        let subtitle = text(subtitle_text).size(13).color(MUTED);
 
         let categories = catalog::categories(&self.catalog);
-        let mut pkg_list = column![].spacing(20).width(Length::Fill);
+        let mut pkg_list = column![].spacing(14).width(Length::Fill);
 
         for cat in &categories {
             let cat_pkgs: Vec<&&Package> = queue.iter().filter(|p| p.category == *cat).collect();
@@ -226,42 +298,48 @@ impl App {
             }
 
             let cat_label = text(catalog::category_display_name(cat).to_uppercase())
-                .size(13)
-                .color(MUTED);
+                .size(11)
+                .color(MUTED_FG);
 
-            let mut cat_col = column![cat_label].spacing(6);
+            let mut cat_col = column![cat_label].spacing(4);
 
             for pkg in cat_pkgs {
                 let method = match (&pkg.install_command, &pkg.winget_id) {
                     (Some(cmd), _) => cmd.clone(),
-                    (_, Some(wid)) => format!("winget: {wid}"),
+                    (_, Some(wid)) => wid.clone(),
                     _ => "unknown".into(),
                 };
 
-                let mut name_row = row![text(&pkg.name).size(15)].spacing(8);
+                let name_text = text(&pkg.name).size(14);
+
+                let mut name_row = row![name_text].spacing(8).align_y(iced::Alignment::Center);
                 if self.is_installed(pkg) {
-                    name_row =
-                        name_row.push(text("(already installed)").size(13).color(STATUS_AMBER));
+                    let badge_label = text("Already installed").size(10).color(STATUS_AMBER);
+                    let badge = container(badge_label)
+                        .style(warning_badge_style)
+                        .padding([2, 6]);
+                    name_row = name_row.push(badge);
                 }
 
                 let pkg_row = row![
                     name_row,
                     iced::widget::Space::new().width(Length::Fill),
-                    text(method).size(13).color(MUTED),
+                    text(method)
+                        .size(11)
+                        .font(iced::Font::MONOSPACE)
+                        .color(MUTED),
                 ]
                 .spacing(8)
-                .align_y(iced::Alignment::Center);
+                .align_y(iced::Alignment::Center)
+                .padding([4, 0]);
 
                 cat_col = cat_col.push(pkg_row);
 
                 if let Some(ref post) = pkg.post_install {
-                    let post_text = container(
-                        text(format!("+ post-install: {post}"))
-                            .size(12)
-                            .color(MUTED),
-                    )
-                    .padding(padding::left(16));
-                    cat_col = cat_col.push(post_text);
+                    let post_text = text(format!("\u{21b3} post-install: {post}"))
+                        .size(11)
+                        .color(MUTED);
+                    cat_col = cat_col.push(container(post_text).padding([2, 0]));
                 }
             }
 
@@ -272,23 +350,35 @@ impl App {
             .height(Length::Fill)
             .width(Length::Fill);
 
-        let install_btn = button(text("Install").size(15))
+        // Footer: Edit ghost button + Install N primary button
+        let new_count = queue.len() - reinstall_count;
+        let install_label = format!("Install {} packages", new_count.max(queue.len().min(1)));
+        let edit_btn = button(text("Edit").size(14))
+            .on_press(Message::GoBack)
+            .style(ghost_button_style)
+            .padding([8, 20]);
+        let install_btn = button(text(install_label).size(14))
             .on_press(Message::StartInstall)
             .style(continue_button_style)
-            .padding([10, 28]);
+            .padding([8, 20]);
 
-        let footer = row![iced::widget::Space::new().width(Length::Fill), install_btn]
-            .align_y(iced::Alignment::Center);
+        let footer = row![
+            iced::widget::Space::new().width(Length::Fill),
+            edit_btn,
+            install_btn,
+        ]
+        .spacing(8)
+        .align_y(iced::Alignment::Center);
 
         let content = column![header, subtitle, scrollable_list, footer]
-            .spacing(16)
+            .spacing(14)
             .width(Length::Fill)
             .height(Length::Fill);
 
         container(content)
             .width(Length::Fill)
             .height(Length::Fill)
-            .padding(40)
+            .padding(28)
             .into()
     }
 
@@ -312,23 +402,23 @@ impl App {
 
         let heading = if scan.done {
             if scan.error.is_some() {
-                text("Scan Failed").size(28)
+                text("Scan Failed").size(20)
             } else {
-                text("All packages are up to date").size(28)
+                text("All packages are up to date").size(20)
             }
         } else if self.dry_run {
-            text("[DRY RUN] Scanning for updates...").size(28)
+            text("[DRY RUN] Scanning for updates...").size(20)
         } else {
-            text("Scanning for updates...").size(28)
+            text("Scanning for updates...").size(20)
         };
 
         let subtitle = if let Some(ref err) = scan.error {
-            text(err.clone()).size(15).color(STATUS_RED)
+            text(err.clone()).size(14).color(STATUS_RED)
         } else if scan.done {
-            text("No outdated packages found.").size(15).color(MUTED)
+            text("No outdated packages found.").size(14).color(MUTED)
         } else {
             text("Checking installed packages via winget...")
-                .size(15)
+                .size(14)
                 .color(MUTED)
         };
 
@@ -337,24 +427,24 @@ impl App {
             .width(Length::Fill);
 
         // Footer
-        let mut back_btn = button(text("Back").size(15))
-            .style(back_button_style)
-            .padding([10, 28]);
-        if scan.done {
-            back_btn = back_btn.on_press(Message::GoBack);
-        }
-
-        let mut cancel_btn = button(text("Cancel").size(15))
+        let mut cancel_btn = button(text("Cancel").size(14))
             .style(cancel_button_style)
-            .padding([10, 28]);
+            .padding([8, 20]);
         if !scan.done {
             cancel_btn = cancel_btn.on_press(Message::CancelUpdateScan);
+        }
+
+        let mut back_btn = button(text("Done").size(14))
+            .style(continue_button_style)
+            .padding([8, 20]);
+        if scan.done {
+            back_btn = back_btn.on_press(Message::GoBack);
         }
 
         let footer = row![
             cancel_btn,
             iced::widget::Space::new().width(Length::Fill),
-            back_btn
+            back_btn,
         ]
         .width(Length::Fill);
 
@@ -366,21 +456,35 @@ impl App {
         container(content)
             .width(Length::Fill)
             .height(Length::Fill)
-            .padding(40)
+            .padding(28)
             .into()
     }
 
     pub(crate) fn view_update_select(&self) -> Element<'_, Message> {
         let scan = &self.update_scan;
-        let header = screen_header("Update \u{2014} Select Packages".into());
+
+        // Header: icon-only back + heading
+        let back_icon = text(char::from(Icon::ChevronLeft))
+            .size(18)
+            .font(LUCIDE_FONT);
+        let back_btn = button(back_icon)
+            .on_press(Message::GoBack)
+            .style(ghost_icon_button_style)
+            .padding([6, 8]);
+
+        let heading = text("Updates").size(18);
+
+        let header = row![back_btn, heading]
+            .spacing(10)
+            .align_y(iced::Alignment::Center);
 
         let count = scan.selected.len();
         let total = scan.packages.len();
         let subtitle = text(format!("{total} outdated packages found"))
-            .size(15)
+            .size(13)
             .color(MUTED);
 
-        let mut pkg_list = column![].spacing(8).width(Length::Fill);
+        let mut pkg_list = column![].spacing(6).width(Length::Fill);
 
         for pkg in &scan.packages {
             let is_checked = scan.selected.contains(&pkg.winget_id);
@@ -389,17 +493,18 @@ impl App {
             let cb = checkbox(is_checked)
                 .label(&pkg.name)
                 .on_toggle(move |_| Message::ToggleUpgradePackage(id.clone()))
-                .size(18)
-                .text_size(15);
+                .size(16)
+                .text_size(14)
+                .style(package_checkbox_style);
 
             let version_info = text(format!(
                 "{} \u{2192} {}  ({})",
                 pkg.current_version, pkg.available_version, pkg.winget_id
             ))
-            .size(13)
+            .size(12)
             .color(MUTED);
 
-            let desc = container(version_info).padding(padding::left(30));
+            let desc = container(version_info).padding(padding::left(26));
 
             pkg_list = pkg_list.push(cb).push(desc);
         }
@@ -409,12 +514,12 @@ impl App {
             .width(Length::Fill);
 
         let footer_text = text(format!("{count} of {total} selected"))
-            .size(14)
+            .size(13)
             .color(MUTED);
 
-        let mut upgrade_btn = button(text("Upgrade").size(15))
+        let mut upgrade_btn = button(text("Upgrade").size(14))
             .style(continue_button_style)
-            .padding([10, 28]);
+            .padding([8, 20]);
         if count > 0 {
             upgrade_btn = upgrade_btn.on_press(Message::StartUpgrade);
         }
@@ -422,19 +527,19 @@ impl App {
         let footer = row![
             footer_text,
             iced::widget::Space::new().width(Length::Fill),
-            upgrade_btn
+            upgrade_btn,
         ]
         .align_y(iced::Alignment::Center);
 
         let content = column![header, subtitle, scrollable_list, footer]
-            .spacing(16)
+            .spacing(14)
             .width(Length::Fill)
             .height(Length::Fill);
 
         container(content)
             .width(Length::Fill)
             .height(Length::Fill)
-            .padding(40)
+            .padding(28)
             .into()
     }
 
@@ -505,28 +610,30 @@ fn view_progress_screen<'a>(
     let total = names.len();
     let (done_count, failed_count, cancelled_count) = state.status_counts();
 
-    let heading = if state.done {
+    // Heading row: "Installing" + "3 of 12" muted
+    let heading_row = if state.done {
         let label = match (dry_run, cancelled_count > 0) {
             (true, true) => "Dry Run Cancelled".to_string(),
             (true, false) => "Dry Run Complete".to_string(),
             (false, true) => format!("{} Cancelled", labels.done_label),
             (false, false) => format!("{} Complete", labels.done_label),
         };
-        text(label).size(28)
-    } else if dry_run {
-        text(format!(
-            "[DRY RUN] {} {} of {total}...",
-            labels.verb,
-            state.current + 1
-        ))
-        .size(28)
+        row![text(label).size(20)]
+            .spacing(8)
+            .align_y(iced::Alignment::Center)
     } else {
-        text(format!(
-            "{} {} of {total}...",
-            labels.verb,
-            state.current + 1
-        ))
-        .size(28)
+        let verb_text = if dry_run {
+            format!("[DRY RUN] {}", labels.verb)
+        } else {
+            labels.verb.to_string()
+        };
+        let count_text = format!("{} of {total}", state.current + 1);
+        row![
+            text(verb_text).size(20),
+            text(count_text).size(14).color(MUTED),
+        ]
+        .spacing(8)
+        .align_y(iced::Alignment::Center)
     };
 
     let subtitle = if state.done {
@@ -537,34 +644,37 @@ fn view_progress_screen<'a>(
         if cancelled_count > 0 {
             parts.push(format!("{cancelled_count} cancelled"));
         }
-        text(parts.join(", ")).size(15).color(MUTED)
+        text(parts.join(", ")).size(13).color(MUTED)
     } else if dry_run {
-        text(labels.dry_run_warning).size(15).color(STATUS_AMBER)
+        text(labels.dry_run_warning).size(13).color(STATUS_AMBER)
     } else {
         let name = names.get(state.current).unwrap_or(&"...");
-        text(format!("Currently {}: {name}", labels.verb.to_lowercase()))
-            .size(15)
-            .color(MUTED)
+        text(*name).size(13).color(MUTED)
     };
 
     let completed = (done_count + failed_count + cancelled_count) as f32;
     let progress = progress_bar(0.0..=total as f32, completed);
 
     let active_label = format!("{}...", labels.verb);
-    let mut pkg_list = column![].spacing(4).width(Length::Fill);
+    let mut pkg_list = column![].spacing(2).width(Length::Fill);
     for (i, name) in names.iter().enumerate() {
         let (icon_char, color, label) = match &state.statuses[i] {
-            PackageStatus::Pending => (ICON_CIRCLE, MUTED, "Pending".into()),
-            PackageStatus::Installing => (ICON_LOADER, STATUS_BLUE, active_label.clone()),
-            PackageStatus::Done => (ICON_CIRCLE_CHECK, STATUS_GREEN, "Done".into()),
-            PackageStatus::Failed(e) => (ICON_CIRCLE_X, STATUS_RED, format!("Failed: {e}")),
-            PackageStatus::Cancelled => (ICON_CIRCLE_X, STATUS_AMBER, "Cancelled".into()),
+            PackageStatus::Pending => (char::from(Icon::Circle), MUTED, "Pending".into()),
+            PackageStatus::Installing => {
+                (char::from(Icon::Loader), STATUS_BLUE, active_label.clone())
+            }
+            PackageStatus::Done => (char::from(Icon::CircleCheck), STATUS_GREEN, "Done".into()),
+            PackageStatus::Failed(e) => (
+                char::from(Icon::CircleX),
+                STATUS_RED,
+                format!("Failed: {e}"),
+            ),
+            PackageStatus::Cancelled => {
+                (char::from(Icon::CircleX), STATUS_AMBER, "Cancelled".into())
+            }
         };
 
-        let icon = text(icon_char)
-            .size(16)
-            .font(iced_fonts::LUCIDE_FONT)
-            .color(color);
+        let icon = text(icon_char).size(14).font(LUCIDE_FONT).color(color);
 
         let pkg_row = row![
             icon,
@@ -573,6 +683,7 @@ fn view_progress_screen<'a>(
             text(label).size(12).color(color),
         ]
         .spacing(8)
+        .padding([4, 0])
         .align_y(iced::Alignment::Center);
 
         pkg_list = pkg_list.push(pkg_row);
@@ -586,16 +697,16 @@ fn view_progress_screen<'a>(
         .height(Length::FillPortion(2))
         .width(Length::Fill);
 
-    let mut cancel_btn = button(text("Cancel").size(15))
+    let mut cancel_btn = button(text("Cancel").size(14))
         .style(cancel_button_style)
-        .padding([10, 28]);
+        .padding([8, 20]);
     if !state.done {
         cancel_btn = cancel_btn.on_press(cancel_msg);
     }
 
-    let mut done_btn = button(text("Done").size(15))
+    let mut done_btn = button(text("Done").size(14))
         .style(continue_button_style)
-        .padding([10, 28]);
+        .padding([8, 20]);
     if state.done {
         done_btn = done_btn.on_press(done_msg);
     }
@@ -603,17 +714,17 @@ fn view_progress_screen<'a>(
     let footer = row![
         cancel_btn,
         iced::widget::Space::new().width(Length::Fill),
-        done_btn
+        done_btn,
     ]
     .width(Length::Fill);
 
     let content = column![
-        heading,
+        heading_row,
         subtitle,
         progress,
         scrollable_pkgs,
         log_box,
-        footer
+        footer,
     ]
     .spacing(12)
     .width(Length::Fill)
@@ -622,40 +733,68 @@ fn view_progress_screen<'a>(
     container(content)
         .width(Length::Fill)
         .height(Length::Fill)
-        .padding(40)
+        .padding(28)
         .into()
 }
 
-/// Back button + heading row, reused across PackageSelect, Review, and similar screens.
-fn screen_header(label: String) -> Element<'static, Message> {
-    let back = button(text("< Back").size(14))
-        .on_press(Message::GoBack)
-        .style(back_button_style)
-        .padding([6, 16]);
+/// Single package row for the 2-column grid in package select.
+fn package_row<'a>(pkg: &'a Package, app: &'a App) -> Element<'a, Message> {
+    let is_checked = app.selected.contains(&pkg.id);
+    let id = pkg.id.clone();
+    let installed = app.is_installed(pkg);
 
-    let heading = text(label).size(28);
+    let cb = checkbox(is_checked)
+        .label(&pkg.name)
+        .on_toggle(move |_| Message::TogglePackage(id.clone()))
+        .size(16)
+        .text_size(14)
+        .style(package_checkbox_style);
 
-    row![back, heading]
-        .spacing(16)
-        .align_y(iced::Alignment::Center)
-        .into()
+    let pkg_row_content: Element<'_, Message> = if installed {
+        let badge_label = text("Installed").size(10).color(STATUS_GREEN);
+        let badge = container(badge_label)
+            .style(installed_badge_style)
+            .padding([1, 6]);
+        row![cb, badge]
+            .spacing(8)
+            .align_y(iced::Alignment::Center)
+            .into()
+    } else {
+        cb.into()
+    };
+
+    container(pkg_row_content).padding([4, 0]).into()
 }
 
 fn profile_card(profile: Profile, selected: Option<Profile>) -> Element<'static, Message> {
     let is_selected = selected == Some(profile);
 
-    let icon = text(profile.icon()).size(32).font(iced_fonts::LUCIDE_FONT);
-    let title = text(profile.title()).size(20);
-    let desc = text(profile.description()).size(14);
+    // Icon in a small bordered box
+    let icon = text(profile.icon())
+        .size(16)
+        .font(LUCIDE_FONT)
+        .color(MUTED_FG);
+    let icon_box = container(icon)
+        .style(icon_box_style)
+        .padding(9)
+        .center_x(36)
+        .center_y(36);
 
-    let card_content = column![icon, title, desc]
-        .spacing(8)
-        .padding(24)
+    // Text column
+    let title = text(profile.title()).size(14);
+    let desc = text(profile.description()).size(12).color(MUTED_FG);
+    let text_col = column![title, desc].spacing(2);
+
+    // Horizontal layout: icon box + text
+    let card_content = row![icon_box, text_col]
+        .spacing(14)
+        .align_y(iced::Alignment::Start)
+        .padding(16)
         .width(Length::Fill);
 
     button(card_content)
         .on_press(Message::ProfileSelected(profile))
-        .width(340)
+        .width(Length::Fill)
         .style(move |theme: &Theme, status| card_style(theme, status, is_selected))
         .into()
 }

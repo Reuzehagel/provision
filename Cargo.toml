@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 iced = { version = "0.14", features = ["canvas", "tokio"] }
-iced_fonts = { version = "0.3", features = ["lucide"] }
+lucide-icons = "0.572"
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["process", "io-util", "time"] }
 toml = "0.8"

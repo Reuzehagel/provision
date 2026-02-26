@@ -30,14 +30,14 @@ If `cargo build` fails with "Access is denied", the binary is still running — 
 
 Iced (0.14) Elm-style architecture: **State → Message → Update → View**.
 
-- **`src/main.rs`** — `App` struct, `Message` enum, `Screen` enum, `ProgressState`, `UpdateScanState`, `update()` logic, `view()` dispatch. Helper methods `is_installed()`/`installed_version()` for checking install state. No view or style code.
+- **`src/main.rs`** — `App` struct, `Message` enum, `Screen` enum, `ProgressState`, `UpdateScanState`, `update()` logic, `view()` dispatch. Helper method `is_installed()` for checking install state. No view or style code.
 - **`src/views.rs`** — All `view_*` methods (as `impl App`), standalone helpers `terminal_log_box()`, `view_progress_screen()`, `screen_header()`, `profile_card()`, `ProgressLabels`.
-- **`src/styles.rs`** — Color constants (`MUTED`, `STATUS_*`), icon codepoints (`ICON_*`), button/card/terminal style functions. `continue_button_style` and `cancel_button_style` share a `colored_button_style` helper.
+- **`src/styles.rs`** — Color constants (zinc palette: `TEXT`, `MUTED`, `MUTED_FG`, `CARD_BG`, `BORDER`, `STATUS_*`), `LUCIDE_FONT` constant, button/card/checkbox/container style functions.
 - **`src/install.rs`** — Install engine. `PackageStatus`/`InstallProgress` enums, `install_all()` returns a stream via `iced::stream::channel`. Reads raw bytes from process stdout with mini terminal emulator (handles `\r`, `\n`, ANSI escapes). Classifies output as `Log` (meaningful) vs `Activity` (transient spinners/progress).
 - **`src/upgrade.rs`** — Upgrade & installed-detection engine. `UpgradeablePackage`/`InstalledPackage` structs, `ScanProgress`/`InstalledScanProgress` enums, `scan_upgrades()`/`scan_installed()` stream winget output, `parse_upgrade_table()`/`parse_list_table()` parse column-aligned tables, `upgrade_all()` streams per-package upgrades.
 - **`src/catalog.rs`** — `Package` struct (derives `Deserialize`), `load_catalog()` (embeds `packages.toml` via `include_str!`), `default_selection()`, `category_display_name()`, `categories()`.
 - **`src/profile.rs`** — `Profile` enum (Personal, Work, Homelab, Manual) with metadata methods (`title`, `description`, `icon`, `slug`) and `Profile::ALL` constant.
-- **`src/theme.rs`** — Theme stub, returns `Theme::Dark`. Seam for future custom theming.
+- **`src/theme.rs`** — Custom theme via `Theme::custom("provision", Palette { ... })` with Tailwind zinc neutrals and blue/emerald/red/amber accents.
 - **`packages.toml`** — 68-package catalog (10 categories) embedded in the binary at compile time. Each entry has `id`, `name`, `description`, `category`, `winget_id`, `profiles`, and optional `post_install`/`install_command`.
 
 Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*` method on `App`.
@@ -61,16 +61,17 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 - **`progress_bar().height()` is private** — don't try to set it
 - **Auto-scroll**: `scrollable(content).anchor_bottom()` keeps scrollable pinned to bottom
 - **Layout stability**: Always render buttons (disabled state) rather than conditionally adding/removing — avoids layout shifts when state changes
+- **Tooltips are broken inside scrollable/grid layouts** — they render inline and overlap adjacent rows. Avoid `tooltip` in scrollable content.
+- **`Theme::custom(name, palette)`** — don't call `.into()` on the name string, it causes ambiguous type inference. Pass `&str` directly. Palette requires all fields including `warning`.
 
 ### Styling
 - Dark theme by default; card/button styles use explicit RGB values for contrast control (don't rely on palette values for card backgrounds — they blend with text on hover)
 - `button::Style::text_color` overrides `.color()` on child text widgets — set description contrast via background color choices, not text color overrides
 - `button::Style` requires `snap: false` field in struct literals
 - Profile cards are `button` widgets wrapping `column` layouts, styled with closures passed to `.style()`
-- Named color constants live in `styles.rs`: `MUTED`, `TERMINAL_TEXT`, `STATUS_BLUE`, `STATUS_GREEN`, `STATUS_RED`, `STATUS_AMBER` — prefer constants over inline `Color::from_rgb(...)` when used more than once
+- Named color constants live in `styles.rs`: zinc palette (`TEXT`, `MUTED_FG`, `MUTED`, `CARD_BG`, `CARD_HOVER`, `BORDER`, `BORDER_FOCUS`) + accents (`STATUS_BLUE`, `STATUS_GREEN`, `STATUS_RED`, `STATUS_AMBER`) — prefer constants over inline `Color::from_rgb(...)` when used more than once
 - Button styles: extract to standalone functions (`card_style`, `back_button_style`) when reusable; inline closures only for one-offs
-- **Icons**: Lucide icons via `iced_fonts` crate (feature `"lucide"`). Use `text(char).font(iced_fonts::LUCIDE_FONT)`. Codepoints in `styles.rs`. Emoji chars do NOT render in Iced — always use an icon font.
-- Load icon fonts via `.font(iced_fonts::LUCIDE_FONT_BYTES)` on the application builder
+- **Icons**: Lucide icons via `lucide-icons` crate. Use `text(char::from(Icon::ChevronLeft)).font(LUCIDE_FONT)` with the type-safe `lucide_icons::Icon` enum — never hardcode codepoints. `LUCIDE_FONT` constant is in `styles.rs`. Load font bytes via `.font(lucide_icons::LUCIDE_FONT_BYTES)` on the application builder. Emoji chars do NOT render in Iced — always use an icon font.
 
 ### Data & Serde
 - Serde structs: derive `Deserialize` directly on runtime types (no separate DTO layer) — see `Package` in `catalog.rs`

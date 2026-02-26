@@ -22,14 +22,6 @@ impl App {
             .as_ref()
             .is_some_and(|wid| self.installed.contains_key(&wid.to_lowercase()))
     }
-
-    /// Look up the installed version for a catalog package, if any.
-    pub(crate) fn installed_version(&self, pkg: &Package) -> Option<&str> {
-        pkg.winget_id
-            .as_ref()
-            .and_then(|wid| self.installed.get(&wid.to_lowercase()))
-            .map(String::as_str)
-    }
 }
 
 #[cfg(not(debug_assertions))]
@@ -86,7 +78,7 @@ fn main() -> iced::Result {
         .title("Provision")
         .theme(App::theme)
         .window_size(Size::new(900.0, 600.0))
-        .font(iced_fonts::LUCIDE_FONT_BYTES)
+        .font(lucide_icons::LUCIDE_FONT_BYTES)
         .run()
 }
 
