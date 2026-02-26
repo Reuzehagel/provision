@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is this?
 
-Windows provisioning GUI built with Rust and Iced. See `IDEA.md` for the full design vision.
+Windows provisioning GUI built with Rust and Iced. See `DESIGN.md` for design system tokens and visual spec.
 
 ## Workflow
 
@@ -38,7 +38,8 @@ Iced (0.14) Elm-style architecture: **State → Message → Update → View**.
 - **`src/catalog.rs`** — `Package` struct (derives `Deserialize`), `load_catalog()` (embeds `packages.toml` via `include_str!`), `default_selection()`, `category_display_name()`, `categories()`.
 - **`src/profile.rs`** — `Profile` enum (Personal, Work, Homelab, Manual) with metadata methods (`title`, `description`, `icon`, `slug`) and `Profile::ALL` constant.
 - **`src/theme.rs`** — Custom theme via `Theme::custom("provision", Palette { ... })` with Tailwind zinc neutrals and blue/emerald/red/amber accents.
-- **`packages.toml`** — 68-package catalog (10 categories) embedded in the binary at compile time. Each entry has `id`, `name`, `description`, `category`, `winget_id`, `profiles`, and optional `post_install`/`install_command`.
+- **`packages.toml`** — 73-package catalog (10 categories) embedded in the binary at compile time. Each entry has `id`, `name`, `description`, `category`, `winget_id`, `profiles`, and optional `post_install`/`install_command`.
+- **`DESIGN.md`** — Design system reference (color tokens, spacing, component patterns). **`design-system.html`** — Browser-viewable version; open to compare tokens against the Iced implementation.
 
 Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*` method on `App`.
 

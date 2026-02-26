@@ -42,15 +42,15 @@ Based on Tailwind's **zinc** scale for neutrals, with semantic accent colors.
 
 | Element           | Size | Weight  | Color            |
 |-------------------|------|---------|------------------|
-| App title         | 36px | Default | `TEXT`           |
-| Screen heading    | 24px | Default | `TEXT`           |
-| Subtitle          | 14px | Default | `TEXT_SECONDARY`  |
-| Card title        | 16px | Default | `TEXT`           |
-| Card description  | 13px | Default | `MUTED_FG`       |
-| Body / labels     | 14px | Default | `TEXT`           |
-| Small / caption   | 12px | Default | `MUTED`          |
-| Category label    | 11px | Default | `MUTED` (uppercase, tracked) |
-| Terminal text     | 12px | Mono    | `MUTED_FG`       |
+| App title         | 28px | Default | `TEXT`           |
+| Screen heading    | 18px | Default | `TEXT`           |
+| Subtitle          | 12px | Default | `TEXT_SECONDARY`  |
+| Card title        | 14px | Default | `TEXT`           |
+| Card description  | 12px | Default | `MUTED_FG`       |
+| Body / labels     | 13px | Default | `TEXT`           |
+| Small / caption   | 11px | Default | `MUTED`          |
+| Category label    | 10px | Default | `MUTED` (uppercase, tracked) |
+| Terminal text     | 11px | Mono    | `MUTED_FG`       |
 
 ---
 
@@ -68,9 +68,9 @@ Consistent spacing scale (multiples of 4):
 | `2xl` | 32px  | Screen padding (all sides)         |
 | `3xl` | 40px  | Was 40 before — keeping for compat |
 
-**Screen padding**: 32px all sides (down from 40 — gives more content space)
-**Card padding**: 20px all sides
-**Between cards**: 12px gap
+**Screen padding**: 24px all sides
+**Card padding**: 14px all sides
+**Between cards**: 8px gap
 **Between screen sections**: 16px
 
 ---
@@ -112,7 +112,7 @@ Consistent spacing scale (multiples of 4):
 - **Icon only**: chevron-left icon (no "< Back" text)
 - Ghost style: transparent bg, `MUTED_FG` icon color
 - Hover: bg `CARD`, icon `TEXT`
-- Size: 32×32px hit target
+- Size: 28×28px hit target
 - Radius: 6px
 
 ### Primary Button (Continue, Install, Upgrade)
@@ -140,7 +140,7 @@ Consistent spacing scale (multiples of 4):
 
 ### Checkbox
 
-- Size: 16px
+- Size: 14×14px
 - Checked: `PRIMARY` fill with white check
 - Unchecked: `BORDER` border, transparent fill
 
@@ -160,9 +160,9 @@ Consistent spacing scale (multiples of 4):
 - Background: `SUCCESS_MUTED` (dark emerald)
 - Text: `SUCCESS`
 - Border: 1px with SUCCESS at ~30% opacity
-- Padding: 1px 8px
+- Padding: 1px 6px
 - Radius: 4px
-- Font size: 11px
+- Font size: 10px
 
 ### Terminal Box
 

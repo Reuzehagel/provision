@@ -8,7 +8,7 @@ name = "Firefox"
 description = "Privacy-focused open-source browser"
 category = "browsers"
 winget_id = "Mozilla.Firefox"
-profiles = ["personal", "work"]
+profiles = []
 
 [[packages]]
 id = "chrome"
@@ -16,7 +16,7 @@ name = "Google Chrome"
 description = "Google's fast, widely-used browser"
 category = "browsers"
 winget_id = "Google.Chrome"
-profiles = ["personal", "work"]
+profiles = []
 
 [[packages]]
 id = "brave"
@@ -24,7 +24,7 @@ name = "Brave"
 description = "Privacy-first browser with built-in ad blocking"
 category = "browsers"
 winget_id = "Brave.Brave"
-profiles = ["personal"]
+profiles = []
 
 [[packages]]
 id = "vivaldi"
@@ -42,6 +42,14 @@ category = "browsers"
 winget_id = "Zen-Team.Zen-Browser"
 profiles = []
 
+[[packages]]
+id = "helium"
+name = "Helium"
+description = "Lightweight, fast web browser"
+category = "browsers"
+winget_id = "ImputNet.Helium"
+profiles = []
+
 # ── Communication ─────────────────────────────────────────
 
 [[packages]]
@@ -50,7 +58,7 @@ name = "Discord"
 description = "Voice, video, and text chat for communities"
 category = "communication"
 winget_id = "Discord.Discord"
-profiles = ["personal", "work"]
+profiles = []
 
 [[packages]]
 id = "slack"
@@ -58,7 +66,7 @@ name = "Slack"
 description = "Team messaging and collaboration platform"
 category = "communication"
 winget_id = "SlackTechnologies.Slack"
-profiles = ["work"]
+profiles = []
 
 [[packages]]
 id = "teams"
@@ -66,7 +74,7 @@ name = "Microsoft Teams"
 description = "Microsoft's collaboration and meetings app"
 category = "communication"
 winget_id = "Microsoft.Teams"
-profiles = ["work"]
+profiles = []
 
 [[packages]]
 id = "zoom"
@@ -74,7 +82,7 @@ name = "Zoom"
 description = "Video conferencing and meetings"
 category = "communication"
 winget_id = "Zoom.Zoom"
-profiles = ["work"]
+profiles = []
 
 [[packages]]
 id = "telegram"
@@ -82,7 +90,7 @@ name = "Telegram"
 description = "Fast, cloud-based messaging app"
 category = "communication"
 winget_id = "Telegram.TelegramDesktop"
-profiles = ["personal"]
+profiles = []
 
 [[packages]]
 id = "signal"
@@ -90,7 +98,7 @@ name = "Signal"
 description = "End-to-end encrypted messaging"
 category = "communication"
 winget_id = "OpenWhisperSystems.Signal"
-profiles = ["personal"]
+profiles = []
 
 [[packages]]
 id = "whatsapp"
@@ -98,7 +106,7 @@ name = "WhatsApp"
 description = "Popular cross-platform messaging app"
 category = "communication"
 winget_id = "WhatsApp.WhatsApp"
-profiles = ["personal"]
+profiles = []
 
 # ── Development ───────────────────────────────────────────
 
@@ -108,7 +116,7 @@ name = "Visual Studio Code"
 description = "Lightweight but powerful code editor"
 category = "development"
 winget_id = "Microsoft.VisualStudioCode"
-profiles = ["personal", "work", "homelab"]
+profiles = []
 
 [[packages]]
 id = "zed"
@@ -124,7 +132,7 @@ name = "Neovim"
 description = "Hyperextensible Vim-based text editor"
 category = "development"
 winget_id = "Neovim.Neovim"
-profiles = ["homelab"]
+profiles = []
 
 [[packages]]
 id = "jetbrains-toolbox"
@@ -132,25 +140,23 @@ name = "JetBrains Toolbox"
 description = "Manage JetBrains IDEs and projects"
 category = "development"
 winget_id = "JetBrains.Toolbox"
-profiles = ["work"]
+profiles = []
 
 [[packages]]
-id = "node-bun"
-name = "Node.js + Bun"
-description = "JavaScript runtime with Bun bundler/runner"
+id = "nodejs"
+name = "Node.js"
+description = "JavaScript runtime built on Chrome's V8 engine"
 category = "development"
 winget_id = "OpenJS.NodeJS.LTS"
-profiles = ["personal", "work"]
-post_install = "npm install -g bun"
+profiles = []
 
 [[packages]]
-id = "python-uv"
-name = "Python + uv"
-description = "Python with fast uv package manager"
+id = "python"
+name = "Python"
+description = "General-purpose programming language"
 category = "development"
 winget_id = "Python.Python.3.12"
-profiles = ["personal", "work", "homelab"]
-post_install = "pip install uv"
+profiles = []
 
 [[packages]]
 id = "rust"
@@ -158,7 +164,7 @@ name = "Rust"
 description = "Systems programming language via rustup"
 category = "development"
 winget_id = "Rustlang.Rustup"
-profiles = ["personal", "work"]
+profiles = []
 
 [[packages]]
 id = "go"
@@ -166,7 +172,7 @@ name = "Go"
 description = "Simple, fast compiled programming language"
 category = "development"
 winget_id = "GoLang.Go"
-profiles = ["work", "homelab"]
+profiles = []
 
 [[packages]]
 id = "git"
@@ -174,7 +180,7 @@ name = "Git"
 description = "Distributed version control system"
 category = "development"
 winget_id = "Git.Git"
-profiles = ["personal", "work", "homelab"]
+profiles = []
 
 [[packages]]
 id = "docker"
@@ -182,7 +188,7 @@ name = "Docker Desktop"
 description = "Container platform for building and running apps"
 category = "development"
 winget_id = "Docker.DockerDesktop"
-profiles = ["work", "homelab"]
+profiles = []
 
 [[packages]]
 id = "windows-terminal"
@@ -190,7 +196,7 @@ name = "Windows Terminal"
 description = "Modern terminal with tabs and GPU rendering"
 category = "development"
 winget_id = "Microsoft.WindowsTerminal"
-profiles = ["personal", "work", "homelab"]
+profiles = []
 
 [[packages]]
 id = "oh-my-posh"
@@ -198,7 +204,7 @@ name = "Oh My Posh"
 description = "Prompt theme engine for any shell"
 category = "development"
 winget_id = "JanDeDobbeleer.OhMyPosh"
-profiles = ["personal", "work"]
+profiles = []
 
 [[packages]]
 id = "github-cli"
@@ -206,7 +212,7 @@ name = "GitHub CLI"
 description = "GitHub's official command-line tool"
 category = "development"
 winget_id = "GitHub.cli"
-profiles = ["personal", "work"]
+profiles = []
 
 [[packages]]
 id = "autohotkey"
@@ -214,7 +220,47 @@ name = "AutoHotkey"
 description = "Scripting language for desktop automation"
 category = "development"
 winget_id = "AutoHotkey.AutoHotkey"
-profiles = ["personal"]
+profiles = []
+
+[[packages]]
+id = "bun"
+name = "Bun"
+description = "Fast, dependency-free JavaScript runtime and bundler"
+category = "development"
+profiles = []
+install_command = "powershell -c \"irm bun.sh/install.ps1|iex\""
+
+[[packages]]
+id = "uv"
+name = "uv"
+description = "Extremely fast Python package and project manager"
+category = "development"
+profiles = []
+install_command = "powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\""
+
+[[packages]]
+id = "starship"
+name = "Starship"
+description = "Cross-shell prompt — fast, minimal, infinitely customizable"
+category = "development"
+winget_id = "Starship.Starship"
+profiles = []
+
+[[packages]]
+id = "fzf"
+name = "fzf"
+description = "General-purpose command-line fuzzy finder"
+category = "development"
+winget_id = "junegunn.fzf"
+profiles = []
+
+[[packages]]
+id = "fd"
+name = "fd"
+description = "Fast and user-friendly alternative to find"
+category = "development"
+winget_id = "sharkdp.fd"
+profiles = []
 
 # ── Documents ─────────────────────────────────────────────
 
@@ -224,7 +270,7 @@ name = "Obsidian"
 description = "Markdown-based knowledge management"
 category = "documents"
 winget_id = "Obsidian.Obsidian"
-profiles = ["personal", "work"]
+profiles = []
 
 [[packages]]
 id = "notion"
@@ -232,7 +278,7 @@ name = "Notion"
 description = "All-in-one workspace for notes and docs"
 category = "documents"
 winget_id = "Notion.Notion"
-profiles = ["work"]
+profiles = []
 
 [[packages]]
 id = "libreoffice"
@@ -240,7 +286,7 @@ name = "LibreOffice"
 description = "Free and open-source office suite"
 category = "documents"
 winget_id = "TheDocumentFoundation.LibreOffice"
-profiles = ["personal"]
+profiles = []
 
 [[packages]]
 id = "adobe-reader"
@@ -248,7 +294,7 @@ name = "Adobe Acrobat Reader"
 description = "Industry-standard PDF viewer"
 category = "documents"
 winget_id = "Adobe.Acrobat.Reader.64-bit"
-profiles = ["work"]
+profiles = []
 
 [[packages]]
 id = "sumatrapdf"
@@ -256,7 +302,7 @@ name = "SumatraPDF"
 description = "Lightweight, fast PDF viewer"
 category = "documents"
 winget_id = "SumatraPDF.SumatraPDF"
-profiles = ["personal"]
+profiles = []
 
 # ── Games ─────────────────────────────────────────────────
 
@@ -266,7 +312,7 @@ name = "Steam"
 description = "Valve's game store and launcher"
 category = "games"
 winget_id = "Valve.Steam"
-profiles = ["personal"]
+profiles = []
 
 [[packages]]
 id = "epic"
@@ -274,7 +320,7 @@ name = "Epic Games Launcher"
 description = "Epic's game store with free weekly games"
 category = "games"
 winget_id = "EpicGames.EpicGamesLauncher"
-profiles = ["personal"]
+profiles = []
 
 [[packages]]
 id = "gog"
@@ -282,7 +328,7 @@ name = "GOG Galaxy"
 description = "DRM-free game store and library manager"
 category = "games"
 winget_id = "GOG.Galaxy"
-profiles = ["personal"]
+profiles = []
 
 [[packages]]
 id = "ea"
@@ -290,7 +336,7 @@ name = "EA App"
 description = "Electronic Arts game launcher"
 category = "games"
 winget_id = "ElectronicArts.EADesktop"
-profiles = ["personal"]
+profiles = []
 
 [[packages]]
 id = "prism-launcher"
@@ -308,7 +354,7 @@ name = "PowerToys"
 description = "Windows power-user utilities from Microsoft"
 category = "microsoft-tools"
 winget_id = "Microsoft.PowerToys"
-profiles = ["personal", "work", "homelab"]
+profiles = []
 
 [[packages]]
 id = "dev-home"
@@ -316,14 +362,14 @@ name = "Dev Home"
 description = "Microsoft's developer dashboard and setup tool"
 category = "microsoft-tools"
 winget_id = "Microsoft.DevHome"
-profiles = ["work"]
+profiles = []
 
 [[packages]]
 id = "wsl"
 name = "WSL"
 description = "Windows Subsystem for Linux"
 category = "microsoft-tools"
-profiles = ["personal", "work", "homelab"]
+profiles = []
 install_command = "wsl --install"
 
 [[packages]]
@@ -332,7 +378,7 @@ name = "Sysinternals Suite"
 description = "Advanced Windows diagnostic utilities"
 category = "microsoft-tools"
 winget_id = "Microsoft.Sysinternals.Suite"
-profiles = ["homelab"]
+profiles = []
 
 [[packages]]
 id = "app-installer"
@@ -340,7 +386,7 @@ name = "App Installer"
 description = "winget CLI and MSIX app installer"
 category = "microsoft-tools"
 winget_id = "Microsoft.AppInstaller"
-profiles = ["personal", "work", "homelab"]
+profiles = []
 
 # ── Multimedia ────────────────────────────────────────────
 
@@ -350,7 +396,7 @@ name = "Spotify"
 description = "Music streaming service"
 category = "multimedia"
 winget_id = "Spotify.Spotify"
-profiles = ["personal"]
+profiles = []
 
 [[packages]]
 id = "vlc"
@@ -358,7 +404,7 @@ name = "VLC"
 description = "Versatile open-source media player"
 category = "multimedia"
 winget_id = "VideoLAN.VLC"
-profiles = ["personal", "work"]
+profiles = []
 
 [[packages]]
 id = "obs"
@@ -366,7 +412,7 @@ name = "OBS Studio"
 description = "Open-source streaming and recording"
 category = "multimedia"
 winget_id = "OBSProject.OBSStudio"
-profiles = ["personal"]
+profiles = []
 
 [[packages]]
 id = "audacity"
@@ -398,7 +444,7 @@ name = "FFmpeg"
 description = "Command-line audio/video processing toolkit"
 category = "multimedia"
 winget_id = "Gyan.FFmpeg"
-profiles = ["personal", "homelab"]
+profiles = []
 
 [[packages]]
 id = "losslesscut"
@@ -414,7 +460,7 @@ name = "ShareX"
 description = "Screen capture, annotation, and sharing"
 category = "multimedia"
 winget_id = "ShareX.ShareX"
-profiles = ["personal", "work"]
+profiles = []
 
 # ── Utilities ─────────────────────────────────────────────
 
@@ -424,7 +470,7 @@ name = "7-Zip"
 description = "High-compression file archiver"
 category = "utilities"
 winget_id = "7zip.7zip"
-profiles = ["personal", "work", "homelab"]
+profiles = []
 
 [[packages]]
 id = "everything"
@@ -432,7 +478,7 @@ name = "Everything"
 description = "Instant file search by name"
 category = "utilities"
 winget_id = "voidtools.Everything"
-profiles = ["personal", "work", "homelab"]
+profiles = []
 
 [[packages]]
 id = "directory-opus"
@@ -448,7 +494,7 @@ name = "Bitwarden"
 description = "Open-source password manager"
 category = "utilities"
 winget_id = "Bitwarden.Bitwarden"
-profiles = ["personal", "work"]
+profiles = []
 
 [[packages]]
 id = "claude"
@@ -456,7 +502,7 @@ name = "Claude"
 description = "Anthropic's AI assistant desktop app"
 category = "utilities"
 winget_id = "Anthropic.Claude"
-profiles = ["personal", "work"]
+profiles = []
 
 [[packages]]
 id = "croc"
@@ -464,7 +510,7 @@ name = "croc"
 description = "Simple, secure file transfer between computers"
 category = "utilities"
 winget_id = "schollz.croc"
-profiles = ["personal", "homelab"]
+profiles = []
 
 [[packages]]
 id = "ente-auth"
@@ -472,7 +518,7 @@ name = "Ente Auth"
 description = "Open-source two-factor authentication"
 category = "utilities"
 winget_id = "Ente.Auth"
-profiles = ["personal"]
+profiles = []
 
 [[packages]]
 id = "altsnap"
@@ -480,7 +526,7 @@ name = "AltSnap"
 description = "Alt+drag window management"
 category = "utilities"
 winget_id = "AltSnap.AltSnap"
-profiles = ["personal"]
+profiles = []
 
 [[packages]]
 id = "hwinfo"
@@ -488,7 +534,7 @@ name = "HWiNFO"
 description = "Hardware analysis and monitoring"
 category = "utilities"
 winget_id = "REALiX.HWiNFO"
-profiles = ["homelab"]
+profiles = []
 
 [[packages]]
 id = "localsend"
@@ -496,7 +542,7 @@ name = "LocalSend"
 description = "Local network file sharing (AirDrop alternative)"
 category = "utilities"
 winget_id = "LocalSend.LocalSend"
-profiles = ["personal"]
+profiles = []
 
 [[packages]]
 id = "nilesoft-shell"
@@ -504,7 +550,7 @@ name = "Nilesoft Shell"
 description = "Context menu customization for Windows"
 category = "utilities"
 winget_id = "Nilesoft.Shell"
-profiles = ["personal"]
+profiles = []
 
 [[packages]]
 id = "raycast"
@@ -512,14 +558,6 @@ name = "Raycast"
 description = "Productivity launcher and command palette"
 category = "utilities"
 winget_id = "Raycast.Raycast"
-profiles = ["personal", "work"]
-
-[[packages]]
-id = "helium"
-name = "Helium"
-description = "Floating browser window (always on top)"
-category = "utilities"
-winget_id = "nickvdp.Helium"
 profiles = []
 
 # ── Security & Privacy ───────────────────────────────────
@@ -530,7 +568,7 @@ name = "Proton Drive"
 description = "End-to-end encrypted cloud storage"
 category = "security-privacy"
 winget_id = "Proton.ProtonDrive"
-profiles = ["personal"]
+profiles = []
 
 [[packages]]
 id = "proton-mail"
@@ -538,7 +576,7 @@ name = "Proton Mail"
 description = "Encrypted email service"
 category = "security-privacy"
 winget_id = "Proton.ProtonMail"
-profiles = ["personal"]
+profiles = []
 
 [[packages]]
 id = "proton-pass"
@@ -554,7 +592,7 @@ name = "Proton VPN"
 description = "Privacy-focused VPN service"
 category = "security-privacy"
 winget_id = "ProtonTechnologies.ProtonVPN"
-profiles = ["personal"]
+profiles = []
 
 # ── Design ────────────────────────────────────────────────
 
@@ -564,4 +602,4 @@ name = "Canva"
 description = "Online graphic design and visual content tool"
 category = "design"
 winget_id = "Canva.Canva"
-profiles = ["personal", "work"]
+profiles = []
