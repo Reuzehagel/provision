@@ -6,6 +6,27 @@ use tokio::process::Command;
 use crate::install::{self, InstallProgress, LineEvent, Sender};
 
 #[derive(Debug, Clone)]
+pub struct InstalledPackage {
+    pub winget_id: String,
+    pub version: String,
+}
+
+#[derive(Debug, Clone)]
+pub enum InstalledScanProgress {
+    Activity {
+        #[allow(dead_code)]
+        line: String,
+    },
+    Completed {
+        packages: Vec<InstalledPackage>,
+    },
+    Failed {
+        #[allow(dead_code)]
+        error: String,
+    },
+}
+
+#[derive(Debug, Clone)]
 pub struct UpgradeablePackage {
     pub name: String,
     pub winget_id: String,
@@ -21,6 +42,146 @@ pub enum ScanProgress {
     Log { line: String },
     Completed { packages: Vec<UpgradeablePackage> },
     Failed { error: String },
+}
+
+pub fn scan_installed(dry_run: bool) -> impl futures::Stream<Item = InstalledScanProgress> + Send {
+    stream::channel(
+        100,
+        move |mut sender: futures::channel::mpsc::Sender<InstalledScanProgress>| async move {
+            if dry_run {
+                let _ = sender
+                    .send(InstalledScanProgress::Activity {
+                        line: "Scanning installed packages...".into(),
+                    })
+                    .await;
+
+                tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+
+                let fake = vec![
+                    InstalledPackage {
+                        winget_id: "Git.Git".into(),
+                        version: "2.47.0".into(),
+                    },
+                    InstalledPackage {
+                        winget_id: "Mozilla.Firefox".into(),
+                        version: "131.0".into(),
+                    },
+                    InstalledPackage {
+                        winget_id: "7zip.7zip".into(),
+                        version: "24.08".into(),
+                    },
+                    InstalledPackage {
+                        winget_id: "Microsoft.WindowsTerminal".into(),
+                        version: "1.21.0".into(),
+                    },
+                    InstalledPackage {
+                        winget_id: "Microsoft.VisualStudioCode".into(),
+                        version: "1.95.0".into(),
+                    },
+                ];
+
+                let _ = sender
+                    .send(InstalledScanProgress::Completed { packages: fake })
+                    .await;
+                return;
+            }
+
+            let child = Command::new("winget")
+                .args(["list"])
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::null())
+                .creation_flags(0x08000000)
+                .spawn();
+
+            let mut child = match child {
+                Ok(c) => c,
+                Err(e) => {
+                    let _ = sender
+                        .send(InstalledScanProgress::Failed {
+                            error: format!("Failed to spawn winget: {e}"),
+                        })
+                        .await;
+                    return;
+                }
+            };
+
+            let mut all_lines: Vec<String> = Vec::new();
+
+            if let Some(stdout) = child.stdout.take() {
+                let all_lines = &mut all_lines;
+                let result = install::read_stdout(stdout, &mut sender, |event| match event {
+                    LineEvent::Log(line) => {
+                        all_lines.push(line.clone());
+                        InstalledScanProgress::Activity { line }
+                    }
+                    LineEvent::Activity(line) => InstalledScanProgress::Activity { line },
+                })
+                .await;
+
+                if let Err(e) = result {
+                    let _ = sender
+                        .send(InstalledScanProgress::Failed { error: e })
+                        .await;
+                    return;
+                }
+            }
+
+            let _ = child.wait().await;
+
+            let packages = parse_list_table(&all_lines);
+            let _ = sender
+                .send(InstalledScanProgress::Completed { packages })
+                .await;
+        },
+    )
+}
+
+pub fn parse_list_table(lines: &[String]) -> Vec<InstalledPackage> {
+    let header_idx = lines
+        .iter()
+        .position(|l| l.contains("Name") && l.contains("Id") && l.contains("Version"));
+
+    let Some(header_idx) = header_idx else {
+        return Vec::new();
+    };
+
+    let header = &lines[header_idx];
+
+    let Some(id_col) = header.find("Id") else {
+        return Vec::new();
+    };
+    let Some(version_col) = header.find("Version") else {
+        return Vec::new();
+    };
+
+    let version_end = header.find("Source").unwrap_or(usize::MAX);
+    let data_start = find_data_start(lines, header_idx);
+
+    let mut packages = Vec::new();
+
+    for line in &lines[data_start..] {
+        if line.len() < version_col + 1 {
+            continue;
+        }
+
+        let id = safe_slice(line, id_col, version_col);
+        let version = if version_end < usize::MAX {
+            safe_slice(line, version_col, version_end)
+        } else {
+            safe_slice_to_end(line, version_col)
+        };
+
+        if id.is_empty() {
+            continue;
+        }
+
+        packages.push(InstalledPackage {
+            winget_id: id.to_lowercase(),
+            version,
+        });
+    }
+
+    packages
 }
 
 pub fn scan_upgrades(dry_run: bool) -> impl futures::Stream<Item = ScanProgress> + Send {
@@ -150,17 +311,7 @@ pub fn parse_upgrade_table(lines: &[String]) -> Vec<UpgradeablePackage> {
         return Vec::new();
     };
     let source_col = header.find("Source");
-
-    // Find the separator line (dashes)
-    let sep_idx = lines[header_idx + 1..].iter().position(|l| {
-        l.starts_with("---") || l.starts_with("───") || l.chars().all(|c| c == '-' || c == ' ')
-    });
-
-    let data_start = if let Some(si) = sep_idx {
-        header_idx + 1 + si + 1
-    } else {
-        header_idx + 1
-    };
+    let data_start = find_data_start(lines, header_idx);
 
     let mut packages = Vec::new();
 
@@ -199,6 +350,17 @@ pub fn parse_upgrade_table(lines: &[String]) -> Vec<UpgradeablePackage> {
     }
 
     packages
+}
+
+/// Find the first data row after the header, skipping any separator line (dashes).
+fn find_data_start(lines: &[String], header_idx: usize) -> usize {
+    let sep_offset = lines[header_idx + 1..].iter().position(|l| {
+        l.starts_with("---") || l.starts_with("───") || l.chars().all(|c| c == '-' || c == ' ')
+    });
+    match sep_offset {
+        Some(offset) => header_idx + 2 + offset,
+        None => header_idx + 1,
+    }
 }
 
 fn snap_forward(s: &str, mut i: usize) -> usize {

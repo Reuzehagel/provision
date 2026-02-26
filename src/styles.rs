@@ -85,6 +85,18 @@ pub fn terminal_box_style(_theme: &Theme) -> container::Style {
     }
 }
 
+pub fn installed_badge_style(_theme: &Theme) -> container::Style {
+    container::Style {
+        background: Some(iced::Background::Color(Color::from_rgb(0.15, 0.25, 0.15))),
+        border: Border {
+            color: Color::from_rgb(0.25, 0.45, 0.25),
+            width: 1.0,
+            radius: 4.0.into(),
+        },
+        ..Default::default()
+    }
+}
+
 pub fn card_style(theme: &Theme, status: button::Status, selected: bool) -> button::Style {
     let palette = theme.extended_palette();
 

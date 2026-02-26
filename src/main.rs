@@ -6,7 +6,7 @@ mod theme;
 mod upgrade;
 mod views;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use iced::{Element, Size, Task, Theme, task};
 
@@ -14,6 +14,23 @@ use catalog::Package;
 use install::PackageStatus;
 use profile::Profile;
 use upgrade::UpgradeablePackage;
+
+impl App {
+    /// Check whether a package from the catalog is already installed.
+    pub(crate) fn is_installed(&self, pkg: &Package) -> bool {
+        pkg.winget_id
+            .as_ref()
+            .is_some_and(|wid| self.installed.contains_key(&wid.to_lowercase()))
+    }
+
+    /// Look up the installed version for a catalog package, if any.
+    pub(crate) fn installed_version(&self, pkg: &Package) -> Option<&str> {
+        pkg.winget_id
+            .as_ref()
+            .and_then(|wid| self.installed.get(&wid.to_lowercase()))
+            .map(String::as_str)
+    }
+}
 
 #[cfg(not(debug_assertions))]
 fn ensure_elevated() {
@@ -197,6 +214,10 @@ pub(crate) struct App {
     // Install state
     pub(crate) install_queue: Vec<Package>,
     pub(crate) install: ProgressState,
+    /// Installed packages detected at startup: winget_id (lowercase) -> version
+    pub(crate) installed: HashMap<String, String>,
+    pub(crate) installed_scan_done: bool,
+    pub(crate) _installed_scan_handle: Option<task::Handle>,
     // Update scan + upgrade state
     pub(crate) update_scan: UpdateScanState,
     pub(crate) upgrade_queue: Vec<UpgradeablePackage>,
@@ -205,6 +226,12 @@ pub(crate) struct App {
 
 impl App {
     fn new(dry_run: bool) -> (Self, Task<Message>) {
+        let (scan_task, scan_handle) = Task::run(
+            upgrade::scan_installed(dry_run),
+            Message::InstalledScanProgress,
+        )
+        .abortable();
+
         (
             Self {
                 dry_run,
@@ -215,11 +242,14 @@ impl App {
                 search: String::new(),
                 install_queue: Vec::new(),
                 install: ProgressState::default(),
+                installed: HashMap::new(),
+                installed_scan_done: false,
+                _installed_scan_handle: Some(scan_handle.abort_on_drop()),
                 update_scan: UpdateScanState::default(),
                 upgrade_queue: Vec::new(),
                 upgrade: ProgressState::default(),
             },
-            Task::none(),
+            scan_task,
         )
     }
 }
@@ -238,6 +268,7 @@ pub(crate) enum Screen {
 
 #[derive(Debug, Clone)]
 pub(crate) enum Message {
+    InstalledScanProgress(upgrade::InstalledScanProgress),
     ProfileSelected(Profile),
     GoBack,
     TogglePackage(String),
@@ -260,9 +291,31 @@ pub(crate) enum Message {
 impl App {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::InstalledScanProgress(event) => match event {
+                upgrade::InstalledScanProgress::Activity { .. } => {}
+                upgrade::InstalledScanProgress::Completed { packages } => {
+                    for pkg in packages {
+                        self.installed.insert(pkg.winget_id, pkg.version);
+                    }
+                    self.installed_scan_done = true;
+                    self._installed_scan_handle = None;
+                }
+                upgrade::InstalledScanProgress::Failed { .. } => {
+                    self.installed_scan_done = true;
+                    self._installed_scan_handle = None;
+                }
+            },
             Message::ProfileSelected(profile) => {
                 self.selected_profile = Some(profile);
-                self.selected = catalog::default_selection(&self.catalog, profile);
+                let mut selection = catalog::default_selection(&self.catalog, profile);
+                if self.installed_scan_done {
+                    for pkg in &self.catalog {
+                        if self.is_installed(pkg) {
+                            selection.remove(&pkg.id);
+                        }
+                    }
+                }
+                self.selected = selection;
                 self.search.clear();
                 self.screen = Screen::PackageSelect;
             }

@@ -9,7 +9,7 @@ use crate::profile::Profile;
 use crate::styles::{
     ICON_CIRCLE, ICON_CIRCLE_CHECK, ICON_CIRCLE_X, ICON_LOADER, MUTED, STATUS_AMBER, STATUS_BLUE,
     STATUS_GREEN, STATUS_RED, TERMINAL_TEXT, back_button_style, cancel_button_style, card_style,
-    continue_button_style, terminal_box_style,
+    continue_button_style, installed_badge_style, terminal_box_style,
 };
 use crate::{App, Message, ProgressState};
 
@@ -47,7 +47,26 @@ impl App {
             .width(Length::Fill)
             .style(move |theme: &Theme, status| card_style(theme, status, false));
 
-        let content = column![title, subtitle, grid, update_card]
+        let scan_status: Element<'_, Message> = if self.installed_scan_done {
+            let count = self.installed.len();
+            text(format!("{count} installed packages detected"))
+                .size(13)
+                .color(MUTED)
+                .into()
+        } else {
+            row![
+                text(ICON_LOADER)
+                    .size(14)
+                    .font(iced_fonts::LUCIDE_FONT)
+                    .color(MUTED),
+                text("Scanning installed packages...").size(13).color(MUTED),
+            ]
+            .spacing(6)
+            .align_y(iced::Alignment::Center)
+            .into()
+        };
+
+        let content = column![title, subtitle, scan_status, grid, update_card]
             .spacing(24)
             .align_x(iced::Alignment::Center);
 
@@ -98,16 +117,36 @@ impl App {
                 let is_checked = self.selected.contains(&pkg.id);
                 let id = pkg.id.clone();
 
+                let installed = self.is_installed(pkg);
+
                 let cb = checkbox(is_checked)
                     .label(&pkg.name)
                     .on_toggle(move |_| Message::TogglePackage(id.clone()))
                     .size(18)
                     .text_size(15);
 
-                let desc = container(text(&pkg.description).size(13).color(MUTED))
-                    .padding(padding::left(30));
+                let pkg_row: Element<'_, Message> = if installed {
+                    let badge_label = text("Installed").size(11).color(STATUS_GREEN);
+                    let badge = container(badge_label)
+                        .style(installed_badge_style)
+                        .padding([2, 8]);
+                    row![cb, badge]
+                        .spacing(10)
+                        .align_y(iced::Alignment::Center)
+                        .into()
+                } else {
+                    cb.into()
+                };
 
-                cat_col = cat_col.push(cb).push(desc);
+                let desc_text = match self.installed_version(pkg) {
+                    Some(ver) => format!("{} (v{ver})", pkg.description),
+                    None => pkg.description.clone(),
+                };
+
+                let desc =
+                    container(text(desc_text).size(13).color(MUTED)).padding(padding::left(30));
+
+                cat_col = cat_col.push(pkg_row).push(desc);
             }
 
             pkg_list = pkg_list.push(cat_col);
@@ -118,9 +157,17 @@ impl App {
             .width(Length::Fill);
 
         let count = self.selected.len();
-        let footer_text = text(format!("{count} packages selected"))
-            .size(14)
-            .color(MUTED);
+        let installed_selected = self
+            .catalog
+            .iter()
+            .filter(|p| self.selected.contains(&p.id) && self.is_installed(p))
+            .count();
+        let footer_label = if installed_selected > 0 {
+            format!("{count} selected ({installed_selected} already installed)")
+        } else {
+            format!("{count} packages selected")
+        };
+        let footer_text = text(footer_label).size(14).color(MUTED);
 
         let mut continue_btn = button(text("Continue").size(15))
             .style(continue_button_style)
@@ -158,9 +205,16 @@ impl App {
             .filter(|p| self.selected.contains(&p.id))
             .collect();
 
-        let subtitle = text(format!("{} packages will be installed", queue.len()))
-            .size(15)
-            .color(MUTED);
+        let reinstall_count = queue.iter().filter(|p| self.is_installed(p)).count();
+        let subtitle_text = if reinstall_count > 0 {
+            format!(
+                "{} packages will be installed ({reinstall_count} already installed)",
+                queue.len()
+            )
+        } else {
+            format!("{} packages will be installed", queue.len())
+        };
+        let subtitle = text(subtitle_text).size(15).color(MUTED);
 
         let categories = catalog::categories(&self.catalog);
         let mut pkg_list = column![].spacing(20).width(Length::Fill);
@@ -184,8 +238,14 @@ impl App {
                     _ => "unknown".into(),
                 };
 
+                let mut name_row = row![text(&pkg.name).size(15)].spacing(8);
+                if self.is_installed(pkg) {
+                    name_row =
+                        name_row.push(text("(already installed)").size(13).color(STATUS_AMBER));
+                }
+
                 let pkg_row = row![
-                    text(&pkg.name).size(15),
+                    name_row,
                     iced::widget::Space::new().width(Length::Fill),
                     text(method).size(13).color(MUTED),
                 ]
