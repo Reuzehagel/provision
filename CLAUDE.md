@@ -36,6 +36,7 @@ Iced (0.14) Elm-style architecture: **State → Message → Update → View**.
 - **`src/install.rs`** — Install engine. `PackageStatus`/`InstallProgress` enums, `install_all()` returns a stream via `iced::stream::channel`. Reads raw bytes from process stdout with mini terminal emulator (handles `\r`, `\n`, ANSI escapes). Classifies output as `Log` (meaningful) vs `Activity` (transient spinners/progress).
 - **`src/upgrade.rs`** — Upgrade & installed-detection engine. `UpgradeablePackage`/`InstalledPackage` structs, `ScanProgress`/`InstalledScanProgress` enums, `scan_upgrades()`/`scan_installed()` stream winget output, `parse_upgrade_table()`/`parse_list_table()` parse column-aligned tables, `upgrade_all()` streams per-package upgrades.
 - **`src/catalog.rs`** — `Package` struct (derives `Deserialize`), `load_catalog()` (embeds `packages.toml` via `include_str!`), `default_selection()`, `category_display_name()`, `categories()`. Also `SelectionFile` serde struct and async `export_selection()`/`import_selection()` using `rfd::AsyncFileDialog` + `tokio::fs`.
+- **`src/settings.rs`** — `WingetSettings` struct with session-only winget flag configuration. `InstallMode`, `InstallScope`, `Architecture` enums with Display impls for pick_list. `OptionalScope`/`OptionalArchitecture` newtypes showing "Default" for `None`. `install_args()` builds extra CLI flags for install/upgrade commands.
 - **`src/profile.rs`** — `Profile` enum (Personal, Work, Manual) with metadata methods (`title`, `description`, `icon`, `slug`) and `Profile::ALL` constant.
 - **`src/theme.rs`** — Custom theme via `Theme::custom("provision", Palette { ... })` with Tailwind zinc neutrals and blue/emerald/red/amber accents.
 - **`packages.toml`** — 73-package catalog (10 categories) embedded in the binary at compile time. Each entry has `id`, `name`, `description`, `category`, `winget_id`, `profiles`, and optional `post_install`/`install_command`.
@@ -64,6 +65,8 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 - **No `horizontal_space()` in iced 0.14** — use `iced::widget::Space::new().width(Length::Fill)`
 - **`progress_bar().height()` is private** — don't try to set it
 - **Auto-scroll**: `scrollable(content).anchor_bottom()` keeps scrollable pinned to bottom
+- **`pick_list(options, selected, on_selected)`** — `T` needs `ToString + PartialEq + Clone`. For `Option<T>` fields, wrap in a newtype with `Display` showing "Default" for `None` (see `OptionalScope`/`OptionalArchitecture` in `settings.rs`)
+- **`toggler(is_checked)`** builder pattern — use `.label()`, `.on_toggle()`, `.size()`. Same pattern as checkbox.
 - **Layout stability**: Always render buttons (disabled state) rather than conditionally adding/removing — avoids layout shifts when state changes
 - **Tooltips are broken inside scrollable/grid layouts** — they render inline and overlap adjacent rows. Avoid `tooltip` in scrollable content.
 - **`Theme::custom(name, palette)`** — don't call `.into()` on the name string, it causes ambiguous type inference. Pass `&str` directly. Palette requires all fields including `warning`.
@@ -89,35 +92,12 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 - **Dead code on enum fields**: Rust doesn't track enum field reads through pattern matching in other modules. Fields in message/progress enums consumed only via `..` or match arms in `main.rs` need `#[allow(dead_code)]` annotations in their defining module.
 - **Shared search state**: `self.search` is reused across screens (only one visible at a time). Clear it in the `update()` handler when transitioning to any screen that uses search (see `ProfileSelected`, `StartUpdateScan`, `FinishAndReset`).
 - **Background startup tasks**: Kick off non-blocking scans in `App::new()` by returning the `Task` from the constructor. Store the `task::Handle` (via `.abort_on_drop()`) to keep it alive. Handle results gracefully — if the scan fails, the app works without the data.
+- **Standalone view helpers returning `Element`**: When a free function takes multiple `&str` params and returns `Element<'_, Message>`, Rust can't infer which borrow — use explicit `<'a>` lifetime on all params and the return type.
+- **Threading config into streams**: Stream closures are `'static` — pass owned data (e.g. `Vec<String>` from `settings.install_args()`) into the closure. Use `.iter().cloned()` to extend args vecs inside the stream.
 
 ## Roadmap
 
 ### Next up
-
-### Winget settings / install flags
-
-Research from UniGetUI (marticliment/UniGetUI) shows these winget flags are worth exposing:
-
-**Already used or should always use:**
-- `--accept-source-agreements`, `--accept-package-agreements` — essential for non-interactive operation
-- `--disable-interactivity` — prevents winget from prompting
-- `--exact` with `--id` — prevents wrong-package installs
-- `--source winget` — pins to the winget community source
-
-**User-configurable (settings screen candidates):**
-- `--silent` vs `--interactive` — UniGetUI defaults to `--silent`; we could let users choose
-- `--scope user` vs `--scope machine` — per-user vs system-wide install
-- `--architecture x86/x64/arm64` — force a specific arch
-- `--force` — reinstall even if already installed
-- `--include-unknown` — include packages with unknown versions in update scans
-- `--ignore-security-hash` — skip hash verification (power-user toggle)
-- `--location "<path>"` — custom install directory
-
-**UniGetUI also handles (out of scope for now):**
-- Auto-retry with elevation based on winget exit codes
-- Pre/post install commands (we already have `post_install` in packages.toml)
-- Proxy support (`--proxy <url>`)
-- Process killing before operations
 
 ### Later releases
 

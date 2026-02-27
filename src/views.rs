@@ -1,11 +1,13 @@
 use iced::widget::{
-    button, checkbox, column, container, progress_bar, row, scrollable, text, text_input,
+    button, checkbox, column, container, pick_list, progress_bar, row, scrollable, text,
+    text_input, toggler,
 };
 use iced::{Element, Length, Theme, padding};
 
 use crate::catalog::{self, Package};
 use crate::install::PackageStatus;
 use crate::profile::Profile;
+use crate::settings::{InstallMode, OptionalArchitecture, OptionalScope};
 use crate::upgrade::UpgradeablePackage;
 use lucide_icons::Icon;
 
@@ -80,6 +82,33 @@ impl App {
             .width(Length::Fill)
             .style(update_card_style);
 
+        // Settings row — same subtle card style
+        let settings_icon = text(char::from(Icon::Settings))
+            .size(15)
+            .font(LUCIDE_FONT)
+            .color(MUTED);
+        let settings_text = text("Winget settings").size(14).color(MUTED_FG);
+        let settings_chevron = text(char::from(Icon::ChevronRight))
+            .size(14)
+            .font(LUCIDE_FONT)
+            .color(MUTED);
+
+        let settings_content = row![
+            settings_icon,
+            settings_text,
+            iced::widget::Space::new().width(Length::Fill),
+            settings_chevron,
+        ]
+        .spacing(12)
+        .align_y(iced::Alignment::Center)
+        .padding([14, 16])
+        .width(Length::Fill);
+
+        let settings_card = button(settings_content)
+            .on_press(Message::OpenSettings)
+            .width(Length::Fill)
+            .style(update_card_style);
+
         // Scan status
         let scan_status: Element<'_, Message> = if self.installed_scan_done {
             let count = self.installed.len();
@@ -108,10 +137,17 @@ impl App {
             .into()
         };
 
-        let content = column![heading_cluster, grid, divider, update_card, scan_status]
-            .spacing(14)
-            .align_x(iced::Alignment::Center)
-            .max_width(500);
+        let content = column![
+            heading_cluster,
+            grid,
+            divider,
+            update_card,
+            settings_card,
+            scan_status,
+        ]
+        .spacing(14)
+        .align_x(iced::Alignment::Center)
+        .max_width(500);
 
         container(content)
             .center_x(Length::Fill)
@@ -650,6 +686,184 @@ impl App {
             Message::FinishUpdateAndReset,
         )
     }
+
+    pub(crate) fn view_settings(&self) -> Element<'_, Message> {
+        let s = &self.settings;
+
+        // Header: back button + "Winget Settings"
+        let back_icon = text(char::from(Icon::ChevronLeft))
+            .size(18)
+            .font(LUCIDE_FONT);
+        let back_btn = button(back_icon)
+            .on_press(Message::GoBack)
+            .style(ghost_icon_button_style)
+            .padding([6, 8]);
+
+        let heading = text("Winget Settings").size(18);
+
+        let header = row![back_btn, heading]
+            .spacing(10)
+            .align_y(iced::Alignment::Center);
+
+        let subtitle = text("Settings apply to this session only")
+            .size(13)
+            .color(MUTED);
+
+        // ── Install Behavior section ─────────────────────────────
+        let section_behavior = text("INSTALL BEHAVIOR").size(11).color(MUTED_FG);
+
+        let mode_row = setting_row(
+            "Install mode",
+            "Silent runs without UI, Interactive shows the installer",
+            pick_list(
+                &InstallMode::ALL[..],
+                Some(s.install_mode),
+                Message::SetInstallMode,
+            )
+            .text_size(13)
+            .width(160)
+            .into(),
+        );
+
+        let scope_row = setting_row(
+            "Scope",
+            "Per-user or system-wide installation",
+            pick_list(
+                &OptionalScope::ALL[..],
+                Some(OptionalScope(s.scope)),
+                Message::SetScope,
+            )
+            .text_size(13)
+            .width(160)
+            .into(),
+        );
+
+        let arch_row = setting_row(
+            "Architecture",
+            "Force a specific processor architecture",
+            pick_list(
+                &OptionalArchitecture::ALL[..],
+                Some(OptionalArchitecture(s.architecture)),
+                Message::SetArchitecture,
+            )
+            .text_size(13)
+            .width(160)
+            .into(),
+        );
+
+        let location_row = setting_row(
+            "Install location",
+            "Custom directory path (leave empty for default)",
+            text_input("", &s.install_location)
+                .on_input(Message::SetInstallLocation)
+                .padding(6)
+                .size(13)
+                .width(260)
+                .into(),
+        );
+
+        // ── Advanced section ─────────────────────────────────────
+        let section_advanced = text("ADVANCED").size(11).color(MUTED_FG);
+
+        let force_row = toggle_row(
+            "Force reinstall",
+            "Reinstall even if already installed (--force)",
+            s.force,
+            Message::ToggleForce,
+        );
+
+        let interactivity_row = toggle_row(
+            "Disable interactivity",
+            "Prevent winget from prompting (--disable-interactivity)",
+            s.disable_interactivity,
+            Message::ToggleDisableInteractivity,
+        );
+
+        let unknown_row = toggle_row(
+            "Include unknown versions",
+            "Show packages with unknown versions in update scans",
+            s.include_unknown,
+            Message::ToggleIncludeUnknown,
+        );
+
+        let hash_row = toggle_row(
+            "Skip hash verification",
+            "Ignore security hash checks (--ignore-security-hash)",
+            s.ignore_security_hash,
+            Message::ToggleIgnoreSecurityHash,
+        );
+
+        let settings_list = column![
+            section_behavior,
+            mode_row,
+            scope_row,
+            arch_row,
+            location_row,
+            section_advanced,
+            force_row,
+            interactivity_row,
+            unknown_row,
+            hash_row,
+        ]
+        .spacing(12)
+        .width(Length::Fill);
+
+        let scrollable_settings = scrollable(settings_list)
+            .height(Length::Fill)
+            .width(Length::Fill);
+
+        let content = column![header, subtitle, scrollable_settings]
+            .spacing(14)
+            .width(Length::Fill)
+            .height(Length::Fill);
+
+        container(content)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .padding(28)
+            .into()
+    }
+}
+
+/// A setting row: label + description on the left, widget on the right.
+fn setting_row<'a>(
+    label: &'a str,
+    description: &'a str,
+    widget: Element<'a, Message>,
+) -> Element<'a, Message> {
+    row![
+        column![
+            text(label).size(14),
+            text(description).size(12).color(MUTED),
+        ]
+        .spacing(2)
+        .width(Length::Fill),
+        widget,
+    ]
+    .spacing(16)
+    .align_y(iced::Alignment::Center)
+    .into()
+}
+
+/// A toggle row: label + description on the left, toggler on the right.
+fn toggle_row<'a>(
+    label: &'a str,
+    description: &'a str,
+    is_on: bool,
+    on_toggle: fn(bool) -> Message,
+) -> Element<'a, Message> {
+    row![
+        column![
+            text(label).size(14),
+            text(description).size(12).color(MUTED),
+        ]
+        .spacing(2)
+        .width(Length::Fill),
+        toggler(is_on).on_toggle(on_toggle).size(20),
+    ]
+    .spacing(16)
+    .align_y(iced::Alignment::Center)
+    .into()
 }
 
 /// Terminal log box: monospace text in a dark container, auto-scrolled to bottom.

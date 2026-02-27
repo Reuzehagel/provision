@@ -1,6 +1,7 @@
 mod catalog;
 mod install;
 mod profile;
+mod settings;
 mod styles;
 mod theme;
 mod upgrade;
@@ -207,6 +208,7 @@ pub(crate) struct App {
     pub(crate) catalog: Vec<Package>,
     pub(crate) selected: HashSet<String>,
     pub(crate) search: String,
+    pub(crate) settings: settings::WingetSettings,
     // Install state
     pub(crate) install_queue: Vec<Package>,
     pub(crate) install: ProgressState,
@@ -238,6 +240,7 @@ impl App {
                 catalog: catalog::load_catalog(),
                 selected: HashSet::new(),
                 search: String::new(),
+                settings: settings::WingetSettings::default(),
                 install_queue: Vec::new(),
                 install: ProgressState::default(),
                 installed: HashMap::new(),
@@ -263,6 +266,7 @@ pub(crate) enum Screen {
     UpdateScanning,
     UpdateSelect,
     Updating,
+    Settings,
 }
 
 #[derive(Debug, Clone)]
@@ -293,6 +297,15 @@ pub(crate) enum Message {
     ClearSelectionStatus,
     CopyLog(Vec<String>),
     ClearCopyStatus,
+    OpenSettings,
+    SetInstallMode(settings::InstallMode),
+    SetScope(settings::OptionalScope),
+    SetArchitecture(settings::OptionalArchitecture),
+    ToggleForce(bool),
+    ToggleIncludeUnknown(bool),
+    ToggleIgnoreSecurityHash(bool),
+    ToggleDisableInteractivity(bool),
+    SetInstallLocation(String),
     KeyConfirm,
     KeyEscape,
     SelectAll,
@@ -341,6 +354,9 @@ impl App {
                 Screen::UpdateSelect => {
                     self.screen = Screen::ProfileSelect;
                 }
+                Screen::Settings => {
+                    self.screen = Screen::ProfileSelect;
+                }
                 _ => {
                     self.search.clear();
                     self.screen = Screen::ProfileSelect;
@@ -370,9 +386,12 @@ impl App {
                 self.screen = Screen::Installing;
 
                 let dry = self.dry_run;
-                let (task, handle) =
-                    Task::run(install::install_all(queue, dry), Message::InstallProgress)
-                        .abortable();
+                let extra = self.settings.install_args();
+                let (task, handle) = Task::run(
+                    install::install_all(queue, dry, extra),
+                    Message::InstallProgress,
+                )
+                .abortable();
 
                 self.install._handle = Some(handle.abort_on_drop());
                 return task;
@@ -401,8 +420,12 @@ impl App {
                 self.screen = Screen::UpdateScanning;
 
                 let dry = self.dry_run;
-                let (task, handle) =
-                    Task::run(upgrade::scan_upgrades(dry), Message::UpdateScanProgress).abortable();
+                let include_unknown = self.settings.include_unknown;
+                let (task, handle) = Task::run(
+                    upgrade::scan_upgrades(dry, include_unknown),
+                    Message::UpdateScanProgress,
+                )
+                .abortable();
 
                 self.update_scan._handle = Some(handle.abort_on_drop());
                 return task;
@@ -463,9 +486,12 @@ impl App {
                 self.screen = Screen::Updating;
 
                 let dry = self.dry_run;
-                let (task, handle) =
-                    Task::run(upgrade::upgrade_all(queue, dry), Message::UpgradeProgress)
-                        .abortable();
+                let extra = self.settings.install_args();
+                let (task, handle) = Task::run(
+                    upgrade::upgrade_all(queue, dry, extra),
+                    Message::UpgradeProgress,
+                )
+                .abortable();
 
                 self.upgrade._handle = Some(handle.abort_on_drop());
                 return task;
@@ -590,6 +616,33 @@ impl App {
                 self.install.copy_status = false;
                 self.upgrade.copy_status = false;
             }
+            Message::OpenSettings => {
+                self.screen = Screen::Settings;
+            }
+            Message::SetInstallMode(mode) => {
+                self.settings.install_mode = mode;
+            }
+            Message::SetScope(opt) => {
+                self.settings.scope = opt.0;
+            }
+            Message::SetArchitecture(opt) => {
+                self.settings.architecture = opt.0;
+            }
+            Message::ToggleForce(v) => {
+                self.settings.force = v;
+            }
+            Message::ToggleIncludeUnknown(v) => {
+                self.settings.include_unknown = v;
+            }
+            Message::ToggleIgnoreSecurityHash(v) => {
+                self.settings.ignore_security_hash = v;
+            }
+            Message::ToggleDisableInteractivity(v) => {
+                self.settings.disable_interactivity = v;
+            }
+            Message::SetInstallLocation(v) => {
+                self.settings.install_location = v;
+            }
             Message::KeyIgnored => {}
             Message::KeyConfirm => {
                 return match self.screen {
@@ -610,9 +663,10 @@ impl App {
             }
             Message::KeyEscape => {
                 return match self.screen {
-                    Screen::PackageSelect | Screen::Review | Screen::UpdateSelect => {
-                        self.update(Message::GoBack)
-                    }
+                    Screen::PackageSelect
+                    | Screen::Review
+                    | Screen::UpdateSelect
+                    | Screen::Settings => self.update(Message::GoBack),
                     Screen::Installing if !self.install.done => self.update(Message::CancelInstall),
                     Screen::UpdateScanning if !self.update_scan.done => {
                         self.update(Message::CancelUpdateScan)
@@ -687,6 +741,7 @@ impl App {
             Screen::UpdateScanning => self.view_update_scanning(),
             Screen::UpdateSelect => self.view_update_select(),
             Screen::Updating => self.view_updating(),
+            Screen::Settings => self.view_settings(),
         }
     }
 

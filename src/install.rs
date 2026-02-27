@@ -56,6 +56,7 @@ pub(crate) enum LineEvent {
 pub fn install_all(
     packages: Vec<Package>,
     dry_run: bool,
+    extra_args: Vec<String>,
 ) -> impl futures::Stream<Item = InstallProgress> + Send {
     stream::channel(100, move |mut sender: Sender| async move {
         for (i, pkg) in packages.iter().enumerate() {
@@ -94,17 +95,16 @@ pub fn install_all(
             let (program, args) = if let Some(ref custom) = pkg.install_command {
                 ("cmd".to_string(), vec!["/C".to_string(), custom.clone()])
             } else if let Some(ref winget_id) = pkg.winget_id {
-                (
-                    "winget".to_string(),
-                    vec![
-                        "install".into(),
-                        "--id".into(),
-                        winget_id.clone(),
-                        "-e".into(),
-                        "--accept-package-agreements".into(),
-                        "--accept-source-agreements".into(),
-                    ],
-                )
+                let mut a = vec![
+                    "install".into(),
+                    "--id".into(),
+                    winget_id.clone(),
+                    "-e".into(),
+                    "--accept-package-agreements".into(),
+                    "--accept-source-agreements".into(),
+                ];
+                a.extend(extra_args.iter().cloned());
+                ("winget".to_string(), a)
             } else {
                 let _ = sender
                     .send(InstallProgress::Failed {

@@ -184,7 +184,10 @@ pub fn parse_list_table(lines: &[String]) -> Vec<InstalledPackage> {
     packages
 }
 
-pub fn scan_upgrades(dry_run: bool) -> impl futures::Stream<Item = ScanProgress> + Send {
+pub fn scan_upgrades(
+    dry_run: bool,
+    include_unknown: bool,
+) -> impl futures::Stream<Item = ScanProgress> + Send {
     stream::channel(
         100,
         move |mut sender: futures::channel::mpsc::Sender<ScanProgress>| async move {
@@ -241,8 +244,13 @@ pub fn scan_upgrades(dry_run: bool) -> impl futures::Stream<Item = ScanProgress>
                 return;
             }
 
+            let mut scan_args = vec!["upgrade"];
+            if include_unknown {
+                scan_args.push("--include-unknown");
+            }
+
             let child = Command::new("winget")
-                .args(["upgrade", "--include-unknown"])
+                .args(&scan_args)
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::null())
                 .creation_flags(0x08000000)
@@ -397,6 +405,7 @@ fn safe_slice_to_end(line: &str, start: usize) -> String {
 pub fn upgrade_all(
     packages: Vec<UpgradeablePackage>,
     dry_run: bool,
+    extra_args: Vec<String>,
 ) -> impl futures::Stream<Item = InstallProgress> + Send {
     stream::channel(100, move |mut sender: Sender| async move {
         for (i, pkg) in packages.iter().enumerate() {
@@ -418,7 +427,7 @@ pub fn upgrade_all(
                 continue;
             }
 
-            let args: Vec<String> = vec![
+            let mut args: Vec<String> = vec![
                 "upgrade".into(),
                 "--id".into(),
                 pkg.winget_id.clone(),
@@ -426,6 +435,7 @@ pub fn upgrade_all(
                 "--accept-package-agreements".into(),
                 "--accept-source-agreements".into(),
             ];
+            args.extend(extra_args.iter().cloned());
 
             match install::run_command("winget", &args, i, &mut sender).await {
                 Ok(()) => {
