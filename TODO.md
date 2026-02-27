@@ -41,7 +41,7 @@
 
 ### CI / GitHub Actions
 
-- [x] Add a workflow: `cargo build --release` + `clippy` + `fmt --check` on push/PR
+- [ ] ~~Add a workflow: `cargo build --release` + `clippy` + `fmt --check` on push/PR~~ — removed, not needed as sole dev
 - [x] Add a release workflow: build on tag push, upload .exe to GitHub Releases
 
 ### CHANGELOG
