@@ -14,8 +14,8 @@ use lucide_icons::Icon;
 use crate::styles::{
     LUCIDE_FONT, MUTED, MUTED_FG, STATUS_AMBER, STATUS_BLUE, STATUS_GREEN, STATUS_RED,
     TERMINAL_TEXT, cancel_button_style, card_style, continue_button_style, divider_style,
-    ghost_button_style, ghost_icon_button_style, icon_box_style, installed_badge_style,
-    package_checkbox_style, terminal_box_style, update_card_style, warning_badge_style,
+    ghost_button_style, icon_box_style, installed_badge_style, package_checkbox_style,
+    terminal_box_style, update_card_style, warning_badge_style,
 };
 use crate::{App, Message, ProgressState};
 
@@ -159,31 +159,7 @@ impl App {
     pub(crate) fn view_package_select(&self) -> Element<'_, Message> {
         let profile = self.selected_profile.unwrap_or(Profile::Manual);
 
-        // Header: icon-only back + heading + spacer + search
-        let back_icon = text(char::from(Icon::ChevronLeft))
-            .size(18)
-            .font(LUCIDE_FONT);
-        let back_btn = button(back_icon)
-            .on_press(Message::GoBack)
-            .style(ghost_icon_button_style)
-            .padding([6, 8]);
-
-        let heading = text(profile.title()).size(18);
-
-        let search_field = text_input("Search...", &self.search)
-            .on_input(Message::SearchChanged)
-            .padding(8)
-            .size(14)
-            .width(200);
-
-        let header = row![
-            back_btn,
-            heading,
-            iced::widget::Space::new().width(Length::Fill),
-            search_field,
-        ]
-        .spacing(10)
-        .align_y(iced::Alignment::Center);
+        let header = search_header(profile.title(), &self.search);
 
         let search_lower = self.search.to_lowercase();
 
@@ -354,20 +330,7 @@ impl App {
     }
 
     pub(crate) fn view_review(&self) -> Element<'_, Message> {
-        // Header: icon-only back + "Review"
-        let back_icon = text(char::from(Icon::ChevronLeft))
-            .size(18)
-            .font(LUCIDE_FONT);
-        let back_btn = button(back_icon)
-            .on_press(Message::GoBack)
-            .style(ghost_icon_button_style)
-            .padding([6, 8]);
-
-        let heading = text("Review").size(18);
-
-        let header = row![back_btn, heading]
-            .spacing(10)
-            .align_y(iced::Alignment::Center);
+        let header = back_header("Review");
 
         let queue: Vec<&Package> = self
             .catalog
@@ -562,31 +525,7 @@ impl App {
     pub(crate) fn view_update_select(&self) -> Element<'_, Message> {
         let scan = &self.update_scan;
 
-        // Header: icon-only back + heading
-        let back_icon = text(char::from(Icon::ChevronLeft))
-            .size(18)
-            .font(LUCIDE_FONT);
-        let back_btn = button(back_icon)
-            .on_press(Message::GoBack)
-            .style(ghost_icon_button_style)
-            .padding([6, 8]);
-
-        let heading = text("Updates").size(18);
-
-        let search_field = text_input("Search...", &self.search)
-            .on_input(Message::SearchChanged)
-            .padding(8)
-            .size(14)
-            .width(200);
-
-        let header = row![
-            back_btn,
-            heading,
-            iced::widget::Space::new().width(Length::Fill),
-            search_field,
-        ]
-        .spacing(10)
-        .align_y(iced::Alignment::Center);
+        let header = search_header("Updates", &self.search);
 
         let search_lower = self.search.to_lowercase();
 
@@ -690,20 +629,7 @@ impl App {
     pub(crate) fn view_settings(&self) -> Element<'_, Message> {
         let s = &self.settings;
 
-        // Header: back button + "Winget Settings"
-        let back_icon = text(char::from(Icon::ChevronLeft))
-            .size(18)
-            .font(LUCIDE_FONT);
-        let back_btn = button(back_icon)
-            .on_press(Message::GoBack)
-            .style(ghost_icon_button_style)
-            .padding([6, 8]);
-
-        let heading = text("Winget Settings").size(18);
-
-        let header = row![back_btn, heading]
-            .spacing(10)
-            .align_y(iced::Alignment::Center);
+        let header = back_header("Winget Settings");
 
         let subtitle = text("Settings apply to this session only")
             .size(13)
@@ -823,6 +749,34 @@ impl App {
             .padding(28)
             .into()
     }
+}
+
+/// Back-button header: chevron-left icon button + heading text.
+fn back_header(title: &str) -> iced::widget::Row<'_, Message> {
+    let back_icon = text(char::from(Icon::ChevronLeft))
+        .size(18)
+        .font(LUCIDE_FONT);
+    let back_btn = button(back_icon)
+        .on_press(Message::GoBack)
+        .style(ghost_button_style)
+        .padding([6, 8]);
+
+    row![back_btn, text(title).size(18)]
+        .spacing(10)
+        .align_y(iced::Alignment::Center)
+}
+
+/// Back-button header with a search field on the right.
+fn search_header<'a>(title: &'a str, search: &'a str) -> iced::widget::Row<'a, Message> {
+    let search_field = text_input("Search...", search)
+        .on_input(Message::SearchChanged)
+        .padding(8)
+        .size(14)
+        .width(200);
+
+    back_header(title)
+        .push(iced::widget::Space::new().width(Length::Fill))
+        .push(search_field)
 }
 
 /// A setting row: label + description on the left, widget on the right.

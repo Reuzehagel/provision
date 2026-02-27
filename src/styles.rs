@@ -140,26 +140,6 @@ pub fn cancel_button_style(_theme: &Theme, status: button::Status) -> button::St
     }
 }
 
-pub fn ghost_icon_button_style(_theme: &Theme, status: button::Status) -> button::Style {
-    let (bg, text_color) = match status {
-        button::Status::Hovered => (CARD_BG, TEXT),
-        button::Status::Pressed => (CARD_HOVER, TEXT),
-        _ => (Color::TRANSPARENT, MUTED_FG),
-    };
-
-    button::Style {
-        background: Some(iced::Background::Color(bg)),
-        text_color,
-        border: Border {
-            color: Color::TRANSPARENT,
-            width: 0.0,
-            radius: 6.0.into(),
-        },
-        shadow: Shadow::default(),
-        snap: false,
-    }
-}
-
 pub fn ghost_button_style(_theme: &Theme, status: button::Status) -> button::Style {
     let (bg, text_color) = match status {
         button::Status::Hovered => (CARD_BG, TEXT),

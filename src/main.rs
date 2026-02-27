@@ -312,6 +312,14 @@ pub(crate) enum Message {
     KeyIgnored,
 }
 
+/// Fire a message after a 4-second delay (used for clearing transient UI feedback).
+fn delayed_clear(msg: Message) -> Task<Message> {
+    Task::perform(
+        async { tokio::time::sleep(std::time::Duration::from_secs(4)).await },
+        move |_| msg,
+    )
+}
+
 /// Toggle a set of IDs: if all are selected, deselect all; otherwise select all.
 fn toggle_set(set: &mut HashSet<String>, ids: Vec<String>) {
     let all_selected = ids.iter().all(|id| set.contains(id));
@@ -709,12 +717,7 @@ impl App {
                 self.selection_status = Some(format!("Export failed: {msg}"));
             }
         }
-        Task::perform(
-            async {
-                tokio::time::sleep(std::time::Duration::from_secs(4)).await;
-            },
-            |_| Message::ClearSelectionStatus,
-        )
+        delayed_clear(Message::ClearSelectionStatus)
     }
 
     fn handle_import_selection(&mut self) -> Task<Message> {
@@ -740,12 +743,7 @@ impl App {
                 self.selection_status = Some(format!("Import failed: {msg}"));
             }
         }
-        Task::perform(
-            async {
-                tokio::time::sleep(std::time::Duration::from_secs(4)).await;
-            },
-            |_| Message::ClearSelectionStatus,
-        )
+        delayed_clear(Message::ClearSelectionStatus)
     }
 
     fn handle_copy_log(&mut self, lines: Vec<String>) -> Task<Message> {
@@ -767,12 +765,7 @@ impl App {
 
         Task::batch([
             clipboard::write(text),
-            Task::perform(
-                async {
-                    tokio::time::sleep(std::time::Duration::from_secs(4)).await;
-                },
-                |_| Message::ClearCopyStatus,
-            ),
+            delayed_clear(Message::ClearCopyStatus),
         ])
     }
 
