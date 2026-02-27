@@ -37,9 +37,9 @@ Iced (0.14) Elm-style architecture: **State → Message → Update → View**.
 - **`src/upgrade.rs`** — Upgrade & installed-detection engine. `UpgradeablePackage`/`InstalledPackage` structs, `ScanProgress`/`InstalledScanProgress` enums, `scan_upgrades()`/`scan_installed()` stream winget output, `parse_upgrade_table()`/`parse_list_table()` parse column-aligned tables, `upgrade_all()` streams per-package upgrades.
 - **`src/catalog.rs`** — `Package` struct (derives `Deserialize`), `load_catalog()` (embeds `packages.toml` via `include_str!`), `default_selection()`, `category_display_name()`, `categories()`. Also `SelectionFile` serde struct and async `export_selection()`/`import_selection()` using `rfd::AsyncFileDialog` + `tokio::fs`.
 - **`src/settings.rs`** — `WingetSettings` struct with session-only winget flag configuration. `InstallMode`, `InstallScope`, `Architecture` enums with Display impls for pick_list. `OptionalScope`/`OptionalArchitecture` newtypes showing "Default" for `None`. `install_args()` builds extra CLI flags for install/upgrade commands.
-- **`src/profile.rs`** — `Profile` enum (Personal, Work, Manual) with metadata methods (`title`, `description`, `icon`, `slug`) and `Profile::ALL` constant.
+- **`src/profile.rs`** — `Profile` enum (Laptop, Desktop, Manual) with metadata methods (`title`, `description`, `icon`, `slug`) and `Profile::ALL` constant.
 - **`src/theme.rs`** — Custom theme via `Theme::custom("provision", Palette { ... })` with Tailwind zinc neutrals and blue/emerald/red/amber accents.
-- **`packages.toml`** — 82-package catalog (10 categories) embedded in the binary at compile time. Each entry has `id`, `name`, `description`, `category`, `winget_id`, `profiles`, and optional `post_install`/`install_command`.
+- **`packages.toml`** — 91-package catalog (10 categories) embedded in the binary at compile time. Each entry has `id`, `name`, `description`, `category`, `winget_id`, `profiles`, and optional `post_install`/`install_command`.
 - **`DESIGN.md`** — Design system reference (color tokens, spacing, component patterns).
 
 Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*` method on `App`.
@@ -79,8 +79,8 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 - `button::Style::text_color` overrides `.color()` on child text widgets — set description contrast via background color choices, not text color overrides
 - `button::Style` requires `snap: false` field in struct literals
 - Profile cards are `button` widgets wrapping `column` layouts, styled with closures passed to `.style()`
-- Named color constants live in `styles.rs`: zinc palette (`TEXT`, `MUTED_FG`, `MUTED`, `CARD_BG`, `CARD_HOVER`, `BORDER`, `BORDER_FOCUS`) + accents (`STATUS_BLUE`, `STATUS_GREEN`, `STATUS_RED`, `STATUS_AMBER`) — prefer constants over inline `Color::from_rgb(...)` when used more than once
-- Button styles: extract to standalone functions (`card_style`, `back_button_style`) when reusable; inline closures only for one-offs
+- Named color constants live in `styles.rs`: zinc palette (`TEXT`, `MUTED_FG`, `MUTED`, `TERMINAL_TEXT`, `CARD_BG`, `CARD_HOVER`, `BORDER`, `BORDER_FOCUS`) + accents (`STATUS_BLUE`, `STATUS_GREEN`, `STATUS_RED`, `STATUS_AMBER`) — prefer constants over inline `Color::from_rgb(...)` when used more than once
+- Button styles: extract to standalone functions (`card_style`, `ghost_button_style`, etc.) when reusable; inline closures only for one-offs
 - **Icons**: Lucide icons via `lucide-icons` crate. Use `text(char::from(Icon::ChevronLeft)).font(LUCIDE_FONT)` with the type-safe `lucide_icons::Icon` enum — never hardcode codepoints. `LUCIDE_FONT` constant is in `styles.rs`. Load font bytes via `.font(lucide_icons::LUCIDE_FONT_BYTES)` on the application builder. Emoji chars do NOT render in Iced — always use an icon font.
 
 ### Data & Serde
@@ -103,8 +103,6 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 - **Threading config into streams**: Stream closures are `'static` — pass owned data (e.g. `Vec<String>` from `settings.install_args()`) into the closure. Use `.iter().cloned()` to extend args vecs inside the stream.
 
 ## Roadmap
-
-### Next up
 
 ### Later releases
 

@@ -32,7 +32,7 @@ name = "Zen Browser"
 description = "Firefox-based browser focused on minimalism"
 category = "browsers"
 winget_id = "Zen-Team.Zen-Browser"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "helium"
@@ -40,7 +40,7 @@ name = "Helium"
 description = "Lightweight, fast web browser"
 category = "browsers"
 winget_id = "ImputNet.Helium"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 # ── Communication ─────────────────────────────────────────
 
@@ -50,7 +50,7 @@ name = "Discord"
 description = "Voice, video, and text chat for communities"
 category = "communication"
 winget_id = "Discord.Discord"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "slack"
@@ -66,7 +66,7 @@ name = "Microsoft Teams"
 description = "Microsoft's collaboration and meetings app"
 category = "communication"
 winget_id = "Microsoft.Teams"
-profiles = []
+profiles = ["laptop"]
 
 [[packages]]
 id = "zoom"
@@ -98,7 +98,7 @@ name = "WhatsApp"
 description = "Popular cross-platform messaging app"
 category = "communication"
 winget_id = "WhatsApp.WhatsApp"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 # ── Development ───────────────────────────────────────────
 
@@ -108,7 +108,7 @@ name = "Visual Studio Code"
 description = "Lightweight but powerful code editor"
 category = "development"
 winget_id = "Microsoft.VisualStudioCode"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "zed"
@@ -116,7 +116,7 @@ name = "Zed"
 description = "Rust based code editor"
 category = "development"
 winget_id = "ZedIndustries.Zed"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "neovim"
@@ -156,7 +156,7 @@ name = "Rust"
 description = "Systems programming language via rustup"
 category = "development"
 winget_id = "Rustlang.Rustup"
-profiles = []
+profiles = ["desktop"]
 
 [[packages]]
 id = "go"
@@ -164,7 +164,7 @@ name = "Go"
 description = "Simple, fast compiled programming language"
 category = "development"
 winget_id = "GoLang.Go"
-profiles = []
+profiles = ["desktop"]
 
 [[packages]]
 id = "git"
@@ -172,7 +172,7 @@ name = "Git"
 description = "Distributed version control system"
 category = "development"
 winget_id = "Git.Git"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "docker"
@@ -180,7 +180,7 @@ name = "Docker Desktop"
 description = "Container platform for building and running apps"
 category = "development"
 winget_id = "Docker.DockerDesktop"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "windows-terminal"
@@ -188,7 +188,7 @@ name = "Windows Terminal"
 description = "Modern terminal with tabs and GPU rendering"
 category = "development"
 winget_id = "Microsoft.WindowsTerminal"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "oh-my-posh"
@@ -204,7 +204,7 @@ name = "GitHub CLI"
 description = "GitHub's official command-line tool"
 category = "development"
 winget_id = "GitHub.cli"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "autohotkey"
@@ -212,7 +212,7 @@ name = "AutoHotkey"
 description = "Scripting language for desktop automation"
 category = "development"
 winget_id = "AutoHotkey.AutoHotkey"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "notepadpp"
@@ -228,7 +228,7 @@ name = "GitHub Desktop"
 description = "Git GUI client from GitHub"
 category = "development"
 winget_id = "GitHub.GitHubDesktop"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "powershell"
@@ -236,14 +236,14 @@ name = "PowerShell 7"
 description = "Modern cross-platform PowerShell"
 category = "development"
 winget_id = "Microsoft.PowerShell"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "bun"
 name = "Bun"
 description = "Fast, dependency-free JavaScript runtime and bundler"
 category = "development"
-profiles = []
+profiles = ["laptop", "desktop"]
 install_command = "powershell -c \"irm bun.sh/install.ps1|iex\""
 
 [[packages]]
@@ -251,7 +251,7 @@ id = "uv"
 name = "uv"
 description = "Extremely fast Python package and project manager"
 category = "development"
-profiles = []
+profiles = ["laptop", "desktop"]
 install_command = "powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\""
 
 [[packages]]
@@ -260,7 +260,7 @@ name = "Starship"
 description = "Cross-shell prompt — fast, minimal, infinitely customizable"
 category = "development"
 winget_id = "Starship.Starship"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "fzf"
@@ -268,7 +268,7 @@ name = "fzf"
 description = "General-purpose command-line fuzzy finder"
 category = "development"
 winget_id = "junegunn.fzf"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "fd"
@@ -276,7 +276,15 @@ name = "fd"
 description = "Fast and user-friendly alternative to find"
 category = "development"
 winget_id = "sharkdp.fd"
-profiles = []
+profiles = ["laptop", "desktop"]
+
+[[packages]]
+id = "just"
+name = "Just"
+description = "Handy command runner for project-specific tasks"
+category = "development"
+winget_id = "Casey.Just"
+profiles = ["laptop", "desktop"]
 
 # ── Documents ─────────────────────────────────────────────
 
@@ -326,7 +334,15 @@ name = "Pandoc"
 description = "Universal document converter"
 category = "documents"
 winget_id = "JohnMacFarlane.Pandoc"
-profiles = []
+profiles = ["laptop", "desktop"]
+
+[[packages]]
+id = "zotero"
+name = "Zotero"
+description = "Open-source reference manager and research organizer"
+category = "documents"
+winget_id = "Zotero.Zotero"
+profiles = ["laptop", "desktop"]
 
 # ── Games ─────────────────────────────────────────────────
 
@@ -336,7 +352,7 @@ name = "Steam"
 description = "Valve's game store and launcher"
 category = "games"
 winget_id = "Valve.Steam"
-profiles = []
+profiles = ["desktop"]
 
 [[packages]]
 id = "epic"
@@ -344,7 +360,7 @@ name = "Epic Games Launcher"
 description = "Epic's game store with free weekly games"
 category = "games"
 winget_id = "EpicGames.EpicGamesLauncher"
-profiles = []
+profiles = ["desktop"]
 
 [[packages]]
 id = "gog"
@@ -368,7 +384,7 @@ name = "Prism Launcher"
 description = "Open-source Minecraft launcher"
 category = "games"
 winget_id = "PrismLauncher.PrismLauncher"
-profiles = []
+profiles = ["desktop"]
 
 [[packages]]
 id = "modrinth"
@@ -401,7 +417,7 @@ id = "wsl"
 name = "WSL"
 description = "Windows Subsystem for Linux"
 category = "microsoft-tools"
-profiles = []
+profiles = ["laptop", "desktop"]
 install_command = "wsl --install"
 
 [[packages]]
@@ -428,7 +444,7 @@ name = "Spotify"
 description = "Music streaming service"
 category = "multimedia"
 winget_id = "Spotify.Spotify"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "vlc"
@@ -444,7 +460,7 @@ name = "OBS Studio"
 description = "Open-source streaming and recording"
 category = "multimedia"
 winget_id = "OBSProject.OBSStudio"
-profiles = []
+profiles = ["desktop"]
 
 [[packages]]
 id = "audacity"
@@ -476,7 +492,7 @@ name = "FFmpeg"
 description = "Command-line audio/video processing toolkit"
 category = "multimedia"
 winget_id = "Gyan.FFmpeg"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "losslesscut"
@@ -484,7 +500,7 @@ name = "LosslessCut"
 description = "Lossless video/audio trimming tool"
 category = "multimedia"
 winget_id = "MifiAS.LosslessCut"
-profiles = []
+profiles = ["desktop"]
 
 [[packages]]
 id = "sharex"
@@ -492,7 +508,23 @@ name = "ShareX"
 description = "Screen capture, annotation, and sharing"
 category = "multimedia"
 winget_id = "ShareX.ShareX"
-profiles = []
+profiles = ["laptop", "desktop"]
+
+[[packages]]
+id = "airserver"
+name = "AirServer"
+description = "Screen mirroring and casting receiver"
+category = "multimedia"
+winget_id = "AppDynamic.AirServer"
+profiles = ["desktop"]
+
+[[packages]]
+id = "topping"
+name = "Topping Software"
+description = "USB DAC driver and configuration software"
+category = "multimedia"
+profiles = ["desktop"]
+install_command = "start https://topping.pro/download/N8yynYw"
 
 # ── Utilities ─────────────────────────────────────────────
 
@@ -510,7 +542,7 @@ name = "Everything"
 description = "Instant file search by name"
 category = "utilities"
 winget_id = "voidtools.Everything"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "directory-opus"
@@ -518,7 +550,7 @@ name = "Directory Opus"
 description = "Advanced file manager for Windows"
 category = "utilities"
 winget_id = "GPSoftware.DirectoryOpus"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "bitwarden"
@@ -534,7 +566,7 @@ name = "Claude"
 description = "Anthropic's AI assistant desktop app"
 category = "utilities"
 winget_id = "Anthropic.Claude"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "croc"
@@ -542,7 +574,7 @@ name = "croc"
 description = "Simple, secure file transfer between computers"
 category = "utilities"
 winget_id = "schollz.croc"
-profiles = []
+profiles = ["desktop"]
 
 [[packages]]
 id = "ente-auth"
@@ -550,7 +582,7 @@ name = "Ente Auth"
 description = "Open-source two-factor authentication"
 category = "utilities"
 winget_id = "Ente.Auth"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "altsnap"
@@ -558,7 +590,7 @@ name = "AltSnap"
 description = "Alt+drag window management"
 category = "utilities"
 winget_id = "AltSnap.AltSnap"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "hwinfo"
@@ -574,7 +606,7 @@ name = "WizTree"
 description = "Blazing fast disk space analyzer"
 category = "utilities"
 winget_id = "AntibodySoftware.WizTree"
-profiles = []
+profiles = ["desktop"]
 
 [[packages]]
 id = "localsend"
@@ -582,7 +614,7 @@ name = "LocalSend"
 description = "Local network file sharing (AirDrop alternative)"
 category = "utilities"
 winget_id = "LocalSend.LocalSend"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "nilesoft-shell"
@@ -590,7 +622,7 @@ name = "Nilesoft Shell"
 description = "Context menu customization for Windows"
 category = "utilities"
 winget_id = "Nilesoft.Shell"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "raycast"
@@ -598,7 +630,47 @@ name = "Raycast"
 description = "Productivity launcher and command palette"
 category = "utilities"
 winget_id = "9PFXXSHC64H3"
-profiles = []
+profiles = ["laptop", "desktop"]
+
+[[packages]]
+id = "altserver"
+name = "AltServer"
+description = "Sideload apps to iOS devices over Wi-Fi"
+category = "utilities"
+winget_id = "RileyTestut.AltServer"
+profiles = ["desktop"]
+
+[[packages]]
+id = "idm"
+name = "Internet Download Manager"
+description = "Download accelerator with browser integration"
+category = "utilities"
+winget_id = "Tonec.InternetDownloadManager"
+profiles = ["laptop", "desktop"]
+
+[[packages]]
+id = "logitech-ghub"
+name = "Logitech G Hub"
+description = "Software for Logitech gaming peripherals"
+category = "utilities"
+winget_id = "Logitech.GHUB"
+profiles = ["desktop"]
+
+[[packages]]
+id = "qbittorrent"
+name = "qBittorrent"
+description = "Free, open-source BitTorrent client"
+category = "utilities"
+winget_id = "qBittorrent.qBittorrent"
+profiles = ["desktop"]
+
+[[packages]]
+id = "rustdesk"
+name = "RustDesk"
+description = "Open-source remote desktop access"
+category = "utilities"
+winget_id = "RustDesk.RustDesk"
+profiles = ["desktop"]
 
 # ── Security & Privacy ───────────────────────────────────
 
@@ -608,7 +680,7 @@ name = "Proton Drive"
 description = "End-to-end encrypted cloud storage"
 category = "security-privacy"
 winget_id = "Proton.ProtonDrive"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "proton-mail"
@@ -658,7 +730,7 @@ name = "Figma"
 description = "Collaborative interface design tool"
 category = "design"
 winget_id = "Figma.Figma"
-profiles = []
+profiles = ["laptop", "desktop"]
 
 [[packages]]
 id = "affinity"
@@ -666,7 +738,7 @@ name = "Affinity"
 description = "Professional creative suite"
 category = "design"
 winget_id = "Canva.Affinity"
-profiles = []
+profiles = ["desktop"]
 
 [[packages]]
 id = "canva"
