@@ -378,6 +378,7 @@ impl App {
             }
             Message::StartUpdateScan => {
                 self.update_scan = UpdateScanState::default();
+                self.search.clear();
                 self.screen = Screen::UpdateScanning;
 
                 let dry = self.dry_run;

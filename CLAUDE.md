@@ -9,6 +9,7 @@ Windows provisioning GUI built with Rust and Iced. See `DESIGN.md` for design sy
 ## Workflow
 
 - **After making any code changes, always run `just check`** — runs `cargo build`, `clippy`, and `fmt --check` in sequence
+- **After completing a roadmap feature, update the Roadmap section** — remove the finished item (or move it to a "Done" section if context is useful to keep)
 
 ## Build & Run
 
@@ -30,7 +31,7 @@ If `cargo build` fails with "Access is denied", the binary is still running — 
 Iced (0.14) Elm-style architecture: **State → Message → Update → View**.
 
 - **`src/main.rs`** — `App` struct, `Message` enum, `Screen` enum, `ProgressState`, `UpdateScanState`, `update()` logic, `view()` dispatch. Helper method `is_installed()` for checking install state. No view or style code.
-- **`src/views.rs`** — All `view_*` methods (as `impl App`), standalone helpers `terminal_log_box()`, `view_progress_screen()`, `screen_header()`, `profile_card()`, `ProgressLabels`.
+- **`src/views.rs`** — All `view_*` methods (as `impl App`), standalone helpers `terminal_log_box()`, `view_progress_screen()`, `profile_card()`, `package_row()`, `ProgressLabels`.
 - **`src/styles.rs`** — Color constants (zinc palette: `TEXT`, `MUTED`, `MUTED_FG`, `CARD_BG`, `BORDER`, `STATUS_*`), `LUCIDE_FONT` constant, button/card/checkbox/container style functions.
 - **`src/install.rs`** — Install engine. `PackageStatus`/`InstallProgress` enums, `install_all()` returns a stream via `iced::stream::channel`. Reads raw bytes from process stdout with mini terminal emulator (handles `\r`, `\n`, ANSI escapes). Classifies output as `Log` (meaningful) vs `Activity` (transient spinners/progress).
 - **`src/upgrade.rs`** — Upgrade & installed-detection engine. `UpgradeablePackage`/`InstalledPackage` structs, `ScanProgress`/`InstalledScanProgress` enums, `scan_upgrades()`/`scan_installed()` stream winget output, `parse_upgrade_table()`/`parse_list_table()` parse column-aligned tables, `upgrade_all()` streams per-package upgrades.
@@ -83,4 +84,44 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 
 ### Rust Patterns
 - **Dead code on enum fields**: Rust doesn't track enum field reads through pattern matching in other modules. Fields in message/progress enums consumed only via `..` or match arms in `main.rs` need `#[allow(dead_code)]` annotations in their defining module.
+- **Shared search state**: `self.search` is reused across screens (only one visible at a time). Clear it in the `update()` handler when transitioning to any screen that uses search (see `ProfileSelected`, `StartUpdateScan`, `FinishAndReset`).
 - **Background startup tasks**: Kick off non-blocking scans in `App::new()` by returning the `Task` from the constructor. Store the `task::Handle` (via `.abort_on_drop()`) to keep it alive. Handle results gracefully — if the scan fails, the app works without the data.
+
+## Roadmap
+
+### Next up
+
+- **Export/Import selections** — Save the current `selected` HashSet to a `.toml` file and load it back. The profile/catalog infrastructure exists (`Package.profiles`, `default_selection()`) but nothing is persisted to disk today — no file I/O at all. Needs: a serializable selection format, `std::fs` read/write, a native file dialog crate (e.g. `rfd`), new Messages (`ExportSelection`, `ImportSelection`, `SelectionFileChosen`). Storage location: `%APPDATA%\provision\selections\` or user-chosen path.
+- **Select All / Deselect All per category** — Add a toggle at each category header on the package select screen. Simple: iterate `catalog` filtered by category and bulk-insert/remove from `self.selected`.
+- **Post-install summary with copy** — When install/upgrade finishes, show a clear succeeded/failed/skipped breakdown. Add a "Copy log" button that writes `self.install.log` to the system clipboard (needs clipboard crate or Iced clipboard support).
+
+### Winget settings / install flags
+
+Research from UniGetUI (marticliment/UniGetUI) shows these winget flags are worth exposing:
+
+**Already used or should always use:**
+- `--accept-source-agreements`, `--accept-package-agreements` — essential for non-interactive operation
+- `--disable-interactivity` — prevents winget from prompting
+- `--exact` with `--id` — prevents wrong-package installs
+- `--source winget` — pins to the winget community source
+
+**User-configurable (settings screen candidates):**
+- `--silent` vs `--interactive` — UniGetUI defaults to `--silent`; we could let users choose
+- `--scope user` vs `--scope machine` — per-user vs system-wide install
+- `--architecture x86/x64/arm64` — force a specific arch
+- `--force` — reinstall even if already installed
+- `--include-unknown` — include packages with unknown versions in update scans
+- `--ignore-security-hash` — skip hash verification (power-user toggle)
+- `--location "<path>"` — custom install directory
+
+**UniGetUI also handles (out of scope for now):**
+- Auto-retry with elevation based on winget exit codes
+- Pre/post install commands (we already have `post_install` in packages.toml)
+- Proxy support (`--proxy <url>`)
+- Process killing before operations
+
+### Later releases
+
+- **Keyboard navigation** — Enter to confirm, Escape to go back, Ctrl+A to select all
+- **Custom/user packages** — Let users add arbitrary winget IDs not in the catalog. Persist to a local config file (`%APPDATA%\provision\custom-packages.toml`)
+- **Config file for preferences** — `%APPDATA%\provision\config.toml` for last-used profile, winget flags, window position, custom packages

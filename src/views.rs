@@ -6,6 +6,7 @@ use iced::{Element, Length, Theme, padding};
 use crate::catalog::{self, Package};
 use crate::install::PackageStatus;
 use crate::profile::Profile;
+use crate::upgrade::UpgradeablePackage;
 use lucide_icons::Icon;
 
 use crate::styles::{
@@ -474,19 +475,49 @@ impl App {
 
         let heading = text("Updates").size(18);
 
-        let header = row![back_btn, heading]
-            .spacing(10)
-            .align_y(iced::Alignment::Center);
+        let search_field = text_input("Search...", &self.search)
+            .on_input(Message::SearchChanged)
+            .padding(8)
+            .size(14)
+            .width(200);
+
+        let header = row![
+            back_btn,
+            heading,
+            iced::widget::Space::new().width(Length::Fill),
+            search_field,
+        ]
+        .spacing(10)
+        .align_y(iced::Alignment::Center);
+
+        let search_lower = self.search.to_lowercase();
+
+        let filtered_packages: Vec<&UpgradeablePackage> = scan
+            .packages
+            .iter()
+            .filter(|p| {
+                search_lower.is_empty()
+                    || p.name.to_lowercase().contains(&search_lower)
+                    || p.winget_id.to_lowercase().contains(&search_lower)
+            })
+            .collect();
 
         let count = scan.selected.len();
         let total = scan.packages.len();
-        let subtitle = text(format!("{total} outdated packages found"))
-            .size(13)
-            .color(MUTED);
+        let shown = filtered_packages.len();
+        let subtitle = if shown < total {
+            text(format!("{shown} of {total} outdated packages (filtered)"))
+                .size(13)
+                .color(MUTED)
+        } else {
+            text(format!("{total} outdated packages found"))
+                .size(13)
+                .color(MUTED)
+        };
 
         let mut pkg_list = column![].spacing(6).width(Length::Fill);
 
-        for pkg in &scan.packages {
+        for pkg in &filtered_packages {
             let is_checked = scan.selected.contains(&pkg.winget_id);
             let id = pkg.winget_id.clone();
 
