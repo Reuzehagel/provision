@@ -16,6 +16,9 @@ check:
     cargo clippy
     cargo fmt --check
 
+sort-packages:
+    cargo run --bin sort_packages
+
 fmt:
     cargo fmt
 

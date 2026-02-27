@@ -2,12 +2,18 @@
 name = "provision"
 version = "0.1.0"
 edition = "2024"
+default-run = "provision"
+description = "A GUI tool that takes a fresh Windows machine from just installed to ready to use"
+license = "MIT"
+authors = ["Reuzehagel"]
+repository = "https://github.com/Reuzehagel/provision"
 
 [dependencies]
 iced = { version = "0.14", features = ["tokio"] }
 lucide-icons = "0.572"
 rfd = "0.15"
 serde = { version = "1", features = ["derive"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 tokio = { version = "1", features = ["process", "io-util", "time", "fs"] }
 toml = "0.8"
 

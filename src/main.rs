@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 
 use iced::{Element, Size, Task, Theme, clipboard, keyboard, task};
 
-use catalog::Package;
+use catalog::{CatalogSource, Package};
 use install::PackageStatus;
 use profile::Profile;
 use upgrade::UpgradeablePackage;
@@ -206,6 +206,7 @@ pub(crate) struct App {
     pub(crate) selected_profile: Option<Profile>,
     pub(crate) screen: Screen,
     pub(crate) catalog: Vec<Package>,
+    pub(crate) catalog_source: CatalogSource,
     pub(crate) selected: HashSet<String>,
     pub(crate) search: String,
     pub(crate) settings: settings::WingetSettings,
@@ -232,12 +233,18 @@ impl App {
         )
         .abortable();
 
+        let catalog_task = Task::perform(
+            catalog::fetch_remote_catalog(dry_run),
+            Message::CatalogFetched,
+        );
+
         (
             Self {
                 dry_run,
                 selected_profile: None,
                 screen: Screen::default(),
                 catalog: catalog::load_catalog(),
+                catalog_source: CatalogSource::Embedded,
                 selected: HashSet::new(),
                 search: String::new(),
                 settings: settings::WingetSettings::default(),
@@ -251,7 +258,7 @@ impl App {
                 upgrade: ProgressState::default(),
                 selection_status: None,
             },
-            scan_task,
+            Task::batch([scan_task, catalog_task]),
         )
     }
 }
@@ -271,6 +278,7 @@ pub(crate) enum Screen {
 
 #[derive(Debug, Clone)]
 pub(crate) enum Message {
+    CatalogFetched(Result<(Vec<Package>, CatalogSource), String>),
     InstalledScanProgress(upgrade::InstalledScanProgress),
     ProfileSelected(Profile),
     GoBack,
@@ -336,6 +344,7 @@ impl App {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             // ── Domain handlers ──────────────────────────────────────
+            Message::CatalogFetched(r) => self.handle_catalog_fetched(r),
             Message::InstalledScanProgress(e) => self.handle_installed_scan_progress(e),
             Message::ProfileSelected(p) => self.handle_profile_selected(p),
             Message::GoBack => self.handle_go_back(),
@@ -430,6 +439,19 @@ impl App {
     }
 
     // ── Navigation & lifecycle ───────────────────────────────────
+
+    fn handle_catalog_fetched(
+        &mut self,
+        result: Result<(Vec<Package>, CatalogSource), String>,
+    ) -> Task<Message> {
+        if let Ok((packages, source)) = result {
+            self.catalog = packages;
+            self.catalog_source = source;
+            let valid_ids: HashSet<&str> = self.catalog.iter().map(|p| p.id.as_str()).collect();
+            self.selected.retain(|id| valid_ids.contains(id.as_str()));
+        }
+        Task::none()
+    }
 
     fn handle_installed_scan_progress(
         &mut self,

@@ -1,8 +1,28 @@
 use std::collections::HashSet;
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
 use crate::profile::Profile;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CatalogSource {
+    Embedded,
+    Cached,
+    Remote,
+}
+
+impl CatalogSource {
+    /// Human-readable suffix for the package count label.
+    /// Returns `None` for `Cached` (no annotation needed).
+    pub fn label_suffix(self) -> Option<&'static str> {
+        match self {
+            CatalogSource::Embedded => Some("built-in"),
+            CatalogSource::Cached => None,
+            CatalogSource::Remote => Some("updated"),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Package {
@@ -31,16 +51,84 @@ struct CatalogFile {
     packages: Vec<Package>,
 }
 
-pub fn load_catalog() -> Vec<Package> {
-    let raw = include_str!("../packages.toml");
-    let file: CatalogFile = toml::from_str(raw).expect("packages.toml should be valid");
-    let mut packages = file.packages;
-    for pkg in &mut packages {
+/// Populate precomputed lowercase fields after deserialization.
+fn prepare_packages(packages: &mut [Package]) {
+    for pkg in packages {
         pkg.name_lower = pkg.name.to_lowercase();
         pkg.desc_lower = pkg.description.to_lowercase();
         pkg.winget_id_lower = pkg.winget_id.as_ref().map(|id| id.to_lowercase());
     }
-    packages
+}
+
+pub fn load_catalog() -> Vec<Package> {
+    let raw = include_str!("../packages.toml");
+    parse_catalog_toml(raw).expect("embedded packages.toml should be valid")
+}
+
+const REMOTE_URL: &str =
+    "https://raw.githubusercontent.com/Reuzehagel/provision/main/packages.toml";
+const CACHE_MAX_AGE: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
+const FETCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Try to load a fresh catalog from the local cache or GitHub.
+///
+/// Returns `Ok(packages)` on success, `Err(reason)` on any failure.
+/// The caller should silently fall back to the embedded catalog on error.
+pub async fn fetch_remote_catalog(dry_run: bool) -> Result<(Vec<Package>, CatalogSource), String> {
+    if dry_run {
+        return Err("skipped in dry-run mode".into());
+    }
+
+    let cache_dir = dirs_cache_dir()?;
+    let cache_path = cache_dir.join("packages.toml");
+
+    // If cache exists and is fresh, use it
+    if let Ok(meta) = tokio::fs::metadata(&cache_path).await
+        && let Ok(modified) = meta.modified()
+        && modified.elapsed().unwrap_or(CACHE_MAX_AGE) < CACHE_MAX_AGE
+    {
+        let raw = tokio::fs::read_to_string(&cache_path)
+            .await
+            .map_err(|e| format!("cache read: {e}"))?;
+        return parse_catalog_toml(&raw).map(|pkgs| (pkgs, CatalogSource::Cached));
+    }
+
+    // Fetch from remote
+    let client = reqwest::Client::builder()
+        .timeout(FETCH_TIMEOUT)
+        .build()
+        .map_err(|e| format!("http client: {e}"))?;
+
+    let resp = client
+        .get(REMOTE_URL)
+        .send()
+        .await
+        .map_err(|e| format!("fetch: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("fetch: {e}"))?;
+
+    let raw = resp.text().await.map_err(|e| format!("read body: {e}"))?;
+
+    let packages = parse_catalog_toml(&raw)?;
+
+    // Write to cache (best-effort)
+    let _ = tokio::fs::create_dir_all(&cache_dir).await;
+    let _ = tokio::fs::write(&cache_path, &raw).await;
+
+    Ok((packages, CatalogSource::Remote))
+}
+
+fn parse_catalog_toml(raw: &str) -> Result<Vec<Package>, String> {
+    let file: CatalogFile = toml::from_str(raw).map_err(|e| format!("parse: {e}"))?;
+    let mut packages = file.packages;
+    prepare_packages(&mut packages);
+    Ok(packages)
+}
+
+/// Resolve the cache directory: `%APPDATA%\provision`
+fn dirs_cache_dir() -> Result<PathBuf, String> {
+    let appdata = std::env::var("APPDATA").map_err(|_| "APPDATA not set".to_string())?;
+    Ok(PathBuf::from(appdata).join("provision"))
 }
 
 /// Return the set of package IDs that should be pre-selected for a profile.

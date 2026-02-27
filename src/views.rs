@@ -4,7 +4,7 @@ use iced::widget::{
 };
 use iced::{Element, Length, Theme, padding};
 
-use crate::catalog::{self, Package};
+use crate::catalog::{self, CatalogSource, Package};
 use crate::install::PackageStatus;
 use crate::profile::Profile;
 use crate::settings::{InstallMode, OptionalArchitecture, OptionalScope};
@@ -109,33 +109,33 @@ impl App {
             .width(Length::Fill)
             .style(update_card_style);
 
-        // Scan status
-        let scan_status: Element<'_, Message> = if self.installed_scan_done {
-            let count = self.installed.len();
-            row![
-                text(char::from(Icon::Check))
-                    .size(12)
-                    .font(LUCIDE_FONT)
-                    .color(MUTED),
-                text(format!("{count} packages detected"))
-                    .size(12)
-                    .color(MUTED),
-            ]
-            .spacing(4)
-            .align_y(iced::Alignment::Center)
-            .into()
+        // Catalog source indicator
+        let pkg_count = self.catalog.len();
+        let catalog_color = if self.catalog_source == CatalogSource::Remote {
+            STATUS_GREEN
         } else {
-            row![
-                text(char::from(Icon::Loader))
-                    .size(12)
-                    .font(LUCIDE_FONT)
-                    .color(MUTED),
-                text("Scanning installed packages...").size(12).color(MUTED),
-            ]
-            .spacing(4)
-            .align_y(iced::Alignment::Center)
-            .into()
+            MUTED
         };
+        let catalog_label = match self.catalog_source.label_suffix() {
+            Some(suffix) => format!("{pkg_count} packages ({suffix})"),
+            None => format!("{pkg_count} packages"),
+        };
+        let catalog_status = status_indicator(Icon::Package, catalog_label, catalog_color);
+
+        // Scan status
+        let scan_status = if self.installed_scan_done {
+            let count = self.installed.len();
+            status_indicator(Icon::Check, format!("{count} packages detected"), MUTED)
+        } else {
+            status_indicator(Icon::Loader, "Scanning installed packages...".into(), MUTED)
+        };
+
+        let status_row = row![
+            catalog_status,
+            iced::widget::Space::new().width(Length::Fill),
+            scan_status,
+        ]
+        .align_y(iced::Alignment::Center);
 
         let content = column![
             heading_cluster,
@@ -143,7 +143,7 @@ impl App {
             divider,
             update_card,
             settings_card,
-            scan_status,
+            status_row,
         ]
         .spacing(14)
         .align_x(iced::Alignment::Center)
@@ -414,7 +414,13 @@ impl App {
 
         // Footer: Edit ghost button + Install N primary button
         let new_count = queue.len() - reinstall_count;
-        let install_label = format!("Install {} packages", new_count.max(queue.len().min(1)));
+        let install_label = if new_count == 0 {
+            format!("Reinstall {} packages", reinstall_count)
+        } else if reinstall_count == 0 {
+            format!("Install {} packages", new_count)
+        } else {
+            format!("Install {} + reinstall {}", new_count, reinstall_count)
+        };
         let edit_btn = button(text("Edit").size(14))
             .on_press(Message::GoBack)
             .style(ghost_button_style)
@@ -1092,6 +1098,20 @@ fn package_row<'a>(pkg: &'a Package, app: &'a App) -> Element<'a, Message> {
     };
 
     container(pkg_row_content).padding([4, 0]).into()
+}
+
+/// Small icon + label row used for status indicators (e.g. catalog source, scan progress).
+fn status_indicator(icon: Icon, label: String, color: iced::Color) -> Element<'static, Message> {
+    row![
+        text(char::from(icon))
+            .size(12)
+            .font(LUCIDE_FONT)
+            .color(color),
+        text(label).size(12).color(color),
+    ]
+    .spacing(4)
+    .align_y(iced::Alignment::Center)
+    .into()
 }
 
 fn profile_card(profile: Profile, selected: Option<Profile>) -> Element<'static, Message> {

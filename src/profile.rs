@@ -18,9 +18,9 @@ impl Profile {
 
     pub fn description(self) -> &'static str {
         match self {
-            Profile::Laptop => "Portable essentials \u{2014} lightweight and battery-friendly",
-            Profile::Desktop => "Full setup \u{2014} dev tools, gaming, and power apps",
-            Profile::Manual => "Start from scratch \u{2014} pick exactly what you want",
+            Profile::Laptop => "Portable essentials",
+            Profile::Desktop => "Full setup",
+            Profile::Manual => "Start from scratch",
         }
     }
 
