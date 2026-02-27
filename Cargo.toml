@@ -6,8 +6,9 @@ edition = "2024"
 [dependencies]
 iced = { version = "0.14", features = ["canvas", "tokio"] }
 lucide-icons = "0.572"
+rfd = "0.15"
 serde = { version = "1", features = ["derive"] }
-tokio = { version = "1", features = ["process", "io-util", "time"] }
+tokio = { version = "1", features = ["process", "io-util", "time", "fs"] }
 toml = "0.8"
 
 [target.'cfg(windows)'.dependencies]

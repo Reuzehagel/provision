@@ -229,6 +229,43 @@ impl App {
         };
         let footer_text = text(footer_label).size(13).color(MUTED);
 
+        let import_btn = button(
+            row![
+                text(char::from(Icon::Upload)).size(14).font(LUCIDE_FONT),
+                text("Import").size(13),
+            ]
+            .spacing(4)
+            .align_y(iced::Alignment::Center),
+        )
+        .on_press(Message::ImportSelection)
+        .style(ghost_button_style)
+        .padding([6, 12]);
+
+        let mut export_btn = button(
+            row![
+                text(char::from(Icon::Download)).size(14).font(LUCIDE_FONT),
+                text("Export").size(13),
+            ]
+            .spacing(4)
+            .align_y(iced::Alignment::Center),
+        )
+        .style(ghost_button_style)
+        .padding([6, 12]);
+        if count > 0 {
+            export_btn = export_btn.on_press(Message::ExportSelection);
+        }
+
+        let status_text: Element<'_, Message> = if let Some(ref msg) = self.selection_status {
+            let color = if msg.contains("failed") {
+                STATUS_RED
+            } else {
+                STATUS_GREEN
+            };
+            text(msg).size(12).color(color).into()
+        } else {
+            iced::widget::Space::new().into()
+        };
+
         let mut continue_btn = button(text("Continue").size(14))
             .style(continue_button_style)
             .padding([8, 20]);
@@ -238,9 +275,13 @@ impl App {
 
         let footer = row![
             footer_text,
+            import_btn,
+            export_btn,
+            status_text,
             iced::widget::Space::new().width(Length::Fill),
             continue_btn,
         ]
+        .spacing(8)
         .align_y(iced::Alignment::Center);
 
         let content = column![header, scrollable_list, footer]

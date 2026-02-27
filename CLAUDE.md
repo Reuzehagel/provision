@@ -35,7 +35,7 @@ Iced (0.14) Elm-style architecture: **State → Message → Update → View**.
 - **`src/styles.rs`** — Color constants (zinc palette: `TEXT`, `MUTED`, `MUTED_FG`, `CARD_BG`, `BORDER`, `STATUS_*`), `LUCIDE_FONT` constant, button/card/checkbox/container style functions.
 - **`src/install.rs`** — Install engine. `PackageStatus`/`InstallProgress` enums, `install_all()` returns a stream via `iced::stream::channel`. Reads raw bytes from process stdout with mini terminal emulator (handles `\r`, `\n`, ANSI escapes). Classifies output as `Log` (meaningful) vs `Activity` (transient spinners/progress).
 - **`src/upgrade.rs`** — Upgrade & installed-detection engine. `UpgradeablePackage`/`InstalledPackage` structs, `ScanProgress`/`InstalledScanProgress` enums, `scan_upgrades()`/`scan_installed()` stream winget output, `parse_upgrade_table()`/`parse_list_table()` parse column-aligned tables, `upgrade_all()` streams per-package upgrades.
-- **`src/catalog.rs`** — `Package` struct (derives `Deserialize`), `load_catalog()` (embeds `packages.toml` via `include_str!`), `default_selection()`, `category_display_name()`, `categories()`.
+- **`src/catalog.rs`** — `Package` struct (derives `Deserialize`), `load_catalog()` (embeds `packages.toml` via `include_str!`), `default_selection()`, `category_display_name()`, `categories()`. Also `SelectionFile` serde struct and async `export_selection()`/`import_selection()` using `rfd::AsyncFileDialog` + `tokio::fs`.
 - **`src/profile.rs`** — `Profile` enum (Personal, Work, Manual) with metadata methods (`title`, `description`, `icon`, `slug`) and `Profile::ALL` constant.
 - **`src/theme.rs`** — Custom theme via `Theme::custom("provision", Palette { ... })` with Tailwind zinc neutrals and blue/emerald/red/amber accents.
 - **`packages.toml`** — 73-package catalog (10 categories) embedded in the binary at compile time. Each entry has `id`, `name`, `description`, `category`, `winget_id`, `profiles`, and optional `post_install`/`install_command`.
@@ -51,6 +51,7 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 - **Rust 2024 edition** — requires Rust 1.85+
 - **No `Task::sip` in iced 0.14** — use `Task::run(stream, mapper)` for streaming progress. Returns `Task<Message>`, call `.abortable()` for cancellation support via `task::Handle`
 - **`iced::stream::channel`** needs explicit sender type: `|mut sender: futures::channel::mpsc::Sender<T>|`
+- **`Task::perform(future, mapper)`** — one-shot async (file dialogs, file I/O). Pair with `Task::perform(async { sleep(4s) }, |_| Msg)` for auto-clearing transient UI feedback.
 - **`futures` crate**: Not a direct dep — use `iced::futures` and `iced::futures::SinkExt as _` for the re-export
 
 ### Layout & Widgets
@@ -91,7 +92,6 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 
 ### Next up
 
-- **Export/Import selections** — Save the current `selected` HashSet to a `.toml` file and load it back. The profile/catalog infrastructure exists (`Package.profiles`, `default_selection()`) but nothing is persisted to disk today — no file I/O at all. Needs: a serializable selection format, `std::fs` read/write, a native file dialog crate (e.g. `rfd`), new Messages (`ExportSelection`, `ImportSelection`, `SelectionFileChosen`). Storage location: `%APPDATA%\provision\selections\` or user-chosen path.
 - **Select All / Deselect All per category** — Add a toggle at each category header on the package select screen. Simple: iterate `catalog` filtered by category and bulk-insert/remove from `self.selected`.
 - **Post-install summary with copy** — When install/upgrade finishes, show a clear succeeded/failed/skipped breakdown. Add a "Copy log" button that writes `self.install.log` to the system clipboard (needs clipboard crate or Iced clipboard support).
 

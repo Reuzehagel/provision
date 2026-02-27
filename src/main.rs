@@ -214,6 +214,8 @@ pub(crate) struct App {
     pub(crate) update_scan: UpdateScanState,
     pub(crate) upgrade_queue: Vec<UpgradeablePackage>,
     pub(crate) upgrade: ProgressState,
+    /// Transient status message for export/import feedback.
+    pub(crate) selection_status: Option<String>,
 }
 
 impl App {
@@ -240,6 +242,7 @@ impl App {
                 update_scan: UpdateScanState::default(),
                 upgrade_queue: Vec::new(),
                 upgrade: ProgressState::default(),
+                selection_status: None,
             },
             scan_task,
         )
@@ -278,6 +281,11 @@ pub(crate) enum Message {
     CancelUpgrade,
     UpgradeProgress(install::InstallProgress),
     FinishUpdateAndReset,
+    ExportSelection,
+    ExportCompleted(Result<(), String>),
+    ImportSelection,
+    ImportCompleted(Result<HashSet<String>, String>),
+    ClearSelectionStatus,
 }
 
 impl App {
@@ -466,6 +474,60 @@ impl App {
                 self.upgrade_queue.clear();
                 self.upgrade = ProgressState::default();
                 self.screen = Screen::ProfileSelect;
+            }
+            Message::ExportSelection => {
+                let selected = self.selected.clone();
+                return Task::perform(
+                    catalog::export_selection(selected),
+                    Message::ExportCompleted,
+                );
+            }
+            Message::ExportCompleted(result) => {
+                match result {
+                    Ok(()) => {
+                        self.selection_status = Some("Selection exported".into());
+                    }
+                    Err(msg) if msg.is_empty() => return Task::none(),
+                    Err(msg) => {
+                        self.selection_status = Some(format!("Export failed: {msg}"));
+                    }
+                }
+                return Task::perform(
+                    async {
+                        tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+                    },
+                    |_| Message::ClearSelectionStatus,
+                );
+            }
+            Message::ImportSelection => {
+                let valid_ids: HashSet<String> =
+                    self.catalog.iter().map(|p| p.id.clone()).collect();
+                return Task::perform(
+                    catalog::import_selection(valid_ids),
+                    Message::ImportCompleted,
+                );
+            }
+            Message::ImportCompleted(result) => {
+                match result {
+                    Ok(ids) => {
+                        let count = ids.len();
+                        self.selected = ids;
+                        self.selection_status = Some(format!("{count} packages imported"));
+                    }
+                    Err(msg) if msg.is_empty() => return Task::none(),
+                    Err(msg) => {
+                        self.selection_status = Some(format!("Import failed: {msg}"));
+                    }
+                }
+                return Task::perform(
+                    async {
+                        tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+                    },
+                    |_| Message::ClearSelectionStatus,
+                );
+            }
+            Message::ClearSelectionStatus => {
+                self.selection_status = None;
             }
         }
         Task::none()

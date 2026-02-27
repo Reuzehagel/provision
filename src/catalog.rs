@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::profile::Profile;
 
@@ -65,4 +65,64 @@ pub fn categories(catalog: &[Package]) -> Vec<String> {
         }
     }
     result
+}
+
+#[derive(Serialize, Deserialize)]
+struct SelectionFile {
+    selected: Vec<String>,
+}
+
+/// Show a Save dialog and write the selection to a TOML file.
+pub async fn export_selection(selected: HashSet<String>) -> Result<(), String> {
+    let handle = rfd::AsyncFileDialog::new()
+        .set_title("Export Selection")
+        .add_filter("TOML files", &["toml"])
+        .set_file_name("provision-selection.toml")
+        .save_file()
+        .await;
+
+    let Some(handle) = handle else {
+        return Err(String::new());
+    };
+
+    let mut ids: Vec<String> = selected.into_iter().collect();
+    ids.sort();
+
+    let file = SelectionFile { selected: ids };
+    let content = toml::to_string_pretty(&file).map_err(|e| format!("Failed to serialize: {e}"))?;
+
+    tokio::fs::write(handle.path(), content)
+        .await
+        .map_err(|e| format!("Failed to write file: {e}"))
+}
+
+/// Show an Open dialog, read the file, and return valid package IDs.
+pub async fn import_selection(valid_ids: HashSet<String>) -> Result<HashSet<String>, String> {
+    let handle = rfd::AsyncFileDialog::new()
+        .set_title("Import Selection")
+        .add_filter("TOML files", &["toml"])
+        .pick_file()
+        .await;
+
+    let Some(handle) = handle else {
+        return Err(String::new());
+    };
+
+    let content = tokio::fs::read_to_string(handle.path())
+        .await
+        .map_err(|e| format!("Failed to read file: {e}"))?;
+
+    let file: SelectionFile = toml::from_str(&content).map_err(|e| format!("Invalid TOML: {e}"))?;
+
+    let imported: HashSet<String> = file
+        .selected
+        .into_iter()
+        .filter(|id| valid_ids.contains(id))
+        .collect();
+
+    if imported.is_empty() {
+        return Err("No recognized packages in file".to_string());
+    }
+
+    Ok(imported)
 }
