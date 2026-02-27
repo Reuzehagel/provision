@@ -10,12 +10,12 @@ repository = "https://github.com/Reuzehagel/provision"
 
 [dependencies]
 iced = { version = "0.14", features = ["tokio"] }
-lucide-icons = "0.572"
-rfd = "0.15"
+lucide-icons = "0.575"
+rfd = "0.17"
 serde = { version = "1", features = ["derive"] }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
 tokio = { version = "1", features = ["process", "io-util", "time", "fs"] }
-toml = "0.8"
+toml = "1"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_UI_Shell", "Win32_Foundation"] }
+windows-sys = { version = "0.61", features = ["Win32_UI_Shell", "Win32_Foundation"] }
