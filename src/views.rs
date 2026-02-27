@@ -183,7 +183,28 @@ impl App {
                 selected_count,
                 total_count,
             );
-            let cat_label = text(cat_label_text).size(11).color(MUTED_FG);
+            let toggle_icon = if selected_count == total_count {
+                Icon::SquareCheckBig
+            } else if selected_count > 0 {
+                Icon::SquareMinus
+            } else {
+                Icon::Square
+            };
+
+            let cat_label = button(
+                row![
+                    text(char::from(toggle_icon))
+                        .size(12)
+                        .font(LUCIDE_FONT)
+                        .color(MUTED_FG),
+                    text(cat_label_text).size(11).color(MUTED_FG),
+                ]
+                .spacing(6)
+                .align_y(iced::Alignment::Center),
+            )
+            .on_press(Message::ToggleCategory(cat.clone()))
+            .style(ghost_button_style)
+            .padding([2, 6]);
 
             // Split packages into left/right columns
             let half = cat_packages.len().div_ceil(2);

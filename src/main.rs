@@ -281,6 +281,7 @@ pub(crate) enum Message {
     CancelUpgrade,
     UpgradeProgress(install::InstallProgress),
     FinishUpdateAndReset,
+    ToggleCategory(String),
     ExportSelection,
     ExportCompleted(Result<(), String>),
     ImportSelection,
@@ -474,6 +475,24 @@ impl App {
                 self.upgrade_queue.clear();
                 self.upgrade = ProgressState::default();
                 self.screen = Screen::ProfileSelect;
+            }
+            Message::ToggleCategory(cat) => {
+                let cat_ids: Vec<String> = self
+                    .catalog
+                    .iter()
+                    .filter(|p| p.category == cat)
+                    .map(|p| p.id.clone())
+                    .collect();
+                let all_selected = cat_ids.iter().all(|id| self.selected.contains(id));
+                if all_selected {
+                    for id in &cat_ids {
+                        self.selected.remove(id);
+                    }
+                } else {
+                    for id in cat_ids {
+                        self.selected.insert(id);
+                    }
+                }
             }
             Message::ExportSelection => {
                 let selected = self.selected.clone();

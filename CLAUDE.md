@@ -92,7 +92,6 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 
 ### Next up
 
-- **Select All / Deselect All per category** — Add a toggle at each category header on the package select screen. Simple: iterate `catalog` filtered by category and bulk-insert/remove from `self.selected`.
 - **Post-install summary with copy** — When install/upgrade finishes, show a clear succeeded/failed/skipped breakdown. Add a "Copy log" button that writes `self.install.log` to the system clipboard (needs clipboard crate or Iced clipboard support).
 
 ### Winget settings / install flags
