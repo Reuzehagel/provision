@@ -8,7 +8,7 @@ mod views;
 
 use std::collections::{HashMap, HashSet};
 
-use iced::{Element, Size, Task, Theme, task};
+use iced::{Element, Size, Task, Theme, clipboard, keyboard, task};
 
 use catalog::Package;
 use install::PackageStatus;
@@ -75,6 +75,7 @@ fn main() -> iced::Result {
     let dry_run = std::env::args().any(|a| a == "--dry");
 
     iced::application(move || App::new(dry_run), App::update, App::view)
+        .subscription(App::subscription)
         .title("Provision")
         .theme(App::theme)
         .window_size(Size::new(900.0, 600.0))
@@ -90,6 +91,7 @@ pub(crate) struct ProgressState {
     pub(crate) log: Vec<String>,
     pub(crate) live_line: String,
     pub(crate) done: bool,
+    pub(crate) copy_status: bool,
     pub(crate) _handle: Option<task::Handle>,
 }
 
@@ -102,6 +104,7 @@ impl ProgressState {
         self.log.clear();
         self.live_line.clear();
         self.done = false;
+        self.copy_status = false;
     }
 
     fn handle_event(
@@ -153,6 +156,7 @@ impl ProgressState {
 
     fn cancel(&mut self, label: &str) {
         self._handle = None;
+        self.copy_status = false;
         for s in &mut self.statuses {
             if matches!(s, PackageStatus::Installing | PackageStatus::Pending) {
                 *s = PackageStatus::Cancelled;
@@ -287,6 +291,12 @@ pub(crate) enum Message {
     ImportSelection,
     ImportCompleted(Result<HashSet<String>, String>),
     ClearSelectionStatus,
+    CopyLog(Vec<String>),
+    ClearCopyStatus,
+    KeyConfirm,
+    KeyEscape,
+    SelectAll,
+    KeyIgnored,
 }
 
 impl App {
@@ -548,6 +558,122 @@ impl App {
             Message::ClearSelectionStatus => {
                 self.selection_status = None;
             }
+            Message::CopyLog(lines) => {
+                // Build clipboard text: summary header + log lines
+                let state = match self.screen {
+                    Screen::Updating => &self.upgrade,
+                    _ => &self.install,
+                };
+                let (done, failed, cancelled) = state.status_counts();
+                let mut header = format!("{done} succeeded, {failed} failed");
+                if cancelled > 0 {
+                    header.push_str(&format!(", {cancelled} cancelled"));
+                }
+                let text = format!("{header}\n\n{}", lines.join("\n"));
+
+                match self.screen {
+                    Screen::Updating => self.upgrade.copy_status = true,
+                    _ => self.install.copy_status = true,
+                }
+
+                return Task::batch([
+                    clipboard::write(text),
+                    Task::perform(
+                        async {
+                            tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+                        },
+                        |_| Message::ClearCopyStatus,
+                    ),
+                ]);
+            }
+            Message::ClearCopyStatus => {
+                self.install.copy_status = false;
+                self.upgrade.copy_status = false;
+            }
+            Message::KeyIgnored => {}
+            Message::KeyConfirm => {
+                return match self.screen {
+                    Screen::PackageSelect if !self.selected.is_empty() => {
+                        self.update(Message::GoToReview)
+                    }
+                    Screen::Review => self.update(Message::StartInstall),
+                    Screen::Installing if self.install.done => self.update(Message::FinishAndReset),
+                    Screen::UpdateScanning if self.update_scan.done => self.update(Message::GoBack),
+                    Screen::UpdateSelect if !self.update_scan.selected.is_empty() => {
+                        self.update(Message::StartUpgrade)
+                    }
+                    Screen::Updating if self.upgrade.done => {
+                        self.update(Message::FinishUpdateAndReset)
+                    }
+                    _ => Task::none(),
+                };
+            }
+            Message::KeyEscape => {
+                return match self.screen {
+                    Screen::PackageSelect | Screen::Review | Screen::UpdateSelect => {
+                        self.update(Message::GoBack)
+                    }
+                    Screen::Installing if !self.install.done => self.update(Message::CancelInstall),
+                    Screen::UpdateScanning if !self.update_scan.done => {
+                        self.update(Message::CancelUpdateScan)
+                    }
+                    Screen::Updating if !self.upgrade.done => self.update(Message::CancelUpgrade),
+                    _ => Task::none(),
+                };
+            }
+            Message::SelectAll => {
+                let search_lower = self.search.to_lowercase();
+                match self.screen {
+                    Screen::PackageSelect => {
+                        let visible_ids: Vec<String> = self
+                            .catalog
+                            .iter()
+                            .filter(|p| {
+                                search_lower.is_empty()
+                                    || p.name.to_lowercase().contains(&search_lower)
+                                    || p.description.to_lowercase().contains(&search_lower)
+                            })
+                            .map(|p| p.id.clone())
+                            .collect();
+                        let all_selected = visible_ids.iter().all(|id| self.selected.contains(id));
+                        if all_selected {
+                            for id in &visible_ids {
+                                self.selected.remove(id);
+                            }
+                        } else {
+                            for id in visible_ids {
+                                self.selected.insert(id);
+                            }
+                        }
+                    }
+                    Screen::UpdateSelect => {
+                        let visible_ids: Vec<String> = self
+                            .update_scan
+                            .packages
+                            .iter()
+                            .filter(|p| {
+                                search_lower.is_empty()
+                                    || p.name.to_lowercase().contains(&search_lower)
+                                    || p.winget_id.to_lowercase().contains(&search_lower)
+                            })
+                            .map(|p| p.winget_id.clone())
+                            .collect();
+                        let all_selected = visible_ids
+                            .iter()
+                            .all(|id| self.update_scan.selected.contains(id));
+                        if all_selected {
+                            for id in &visible_ids {
+                                self.update_scan.selected.remove(id);
+                            }
+                        } else {
+                            for id in visible_ids {
+                                self.update_scan.selected.insert(id);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
         }
         Task::none()
     }
@@ -562,6 +688,22 @@ impl App {
             Screen::UpdateSelect => self.view_update_select(),
             Screen::Updating => self.view_updating(),
         }
+    }
+
+    fn subscription(&self) -> iced::Subscription<Message> {
+        keyboard::listen().map(|event| match event {
+            keyboard::Event::KeyPressed { key, modifiers, .. } => match key.as_ref() {
+                keyboard::Key::Named(keyboard::key::Named::Enter) if modifiers.is_empty() => {
+                    Message::KeyConfirm
+                }
+                keyboard::Key::Named(keyboard::key::Named::Escape) if modifiers.is_empty() => {
+                    Message::KeyEscape
+                }
+                keyboard::Key::Character("a") if modifiers.command() => Message::SelectAll,
+                _ => Message::KeyIgnored,
+            },
+            _ => Message::KeyIgnored,
+        })
     }
 
     fn theme(&self) -> Theme {

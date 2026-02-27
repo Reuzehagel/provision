@@ -30,7 +30,7 @@ If `cargo build` fails with "Access is denied", the binary is still running — 
 
 Iced (0.14) Elm-style architecture: **State → Message → Update → View**.
 
-- **`src/main.rs`** — `App` struct, `Message` enum, `Screen` enum, `ProgressState`, `UpdateScanState`, `update()` logic, `view()` dispatch. Helper method `is_installed()` for checking install state. No view or style code.
+- **`src/main.rs`** — `App` struct, `Message` enum, `Screen` enum, `ProgressState`, `UpdateScanState`, `update()` logic, `view()` dispatch, `subscription()` for keyboard shortcuts. Helper method `is_installed()` for checking install state. No view or style code.
 - **`src/views.rs`** — All `view_*` methods (as `impl App`), standalone helpers `terminal_log_box()`, `view_progress_screen()`, `profile_card()`, `package_row()`, `ProgressLabels`.
 - **`src/styles.rs`** — Color constants (zinc palette: `TEXT`, `MUTED`, `MUTED_FG`, `CARD_BG`, `BORDER`, `STATUS_*`), `LUCIDE_FONT` constant, button/card/checkbox/container style functions.
 - **`src/install.rs`** — Install engine. `PackageStatus`/`InstallProgress` enums, `install_all()` returns a stream via `iced::stream::channel`. Reads raw bytes from process stdout with mini terminal emulator (handles `\r`, `\n`, ANSI escapes). Classifies output as `Log` (meaningful) vs `Activity` (transient spinners/progress).
@@ -53,6 +53,8 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 - **`iced::stream::channel`** needs explicit sender type: `|mut sender: futures::channel::mpsc::Sender<T>|`
 - **`Task::perform(future, mapper)`** — one-shot async (file dialogs, file I/O). Pair with `Task::perform(async { sleep(4s) }, |_| Msg)` for auto-clearing transient UI feedback.
 - **`futures` crate**: Not a direct dep — use `iced::futures` and `iced::futures::SinkExt as _` for the re-export
+- **Keyboard subscriptions**: No `keyboard::on_key_press` in iced 0.14 — use `keyboard::listen()` which returns `Subscription<keyboard::Event>`. Call `.map()` to convert events to `Message` (requires a catch-all variant like `KeyIgnored` since `.map()` is total). Match on `Event::KeyPressed { key, modifiers, .. }` for key handling.
+- **Subscriptions**: Wire up with `.subscription(App::subscription)` on the application builder. The `subscription()` closure is `'static` — cannot capture `&self`, so route by screen in `update()` instead.
 
 ### Layout & Widgets
 - Center content in a screen: `container(content).center_x(Length::Fill).center_y(Length::Fill)`
@@ -92,8 +94,6 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 
 ### Next up
 
-- **Post-install summary with copy** — When install/upgrade finishes, show a clear succeeded/failed/skipped breakdown. Add a "Copy log" button that writes `self.install.log` to the system clipboard (needs clipboard crate or Iced clipboard support).
-
 ### Winget settings / install flags
 
 Research from UniGetUI (marticliment/UniGetUI) shows these winget flags are worth exposing:
@@ -121,6 +121,5 @@ Research from UniGetUI (marticliment/UniGetUI) shows these winget flags are wort
 
 ### Later releases
 
-- **Keyboard navigation** — Enter to confirm, Escape to go back, Ctrl+A to select all
 - **Custom/user packages** — Let users add arbitrary winget IDs not in the catalog. Persist to a local config file (`%APPDATA%\provision\custom-packages.toml`)
 - **Config file for preferences** — `%APPDATA%\provision\config.toml` for last-used profile, winget flags, window position, custom packages

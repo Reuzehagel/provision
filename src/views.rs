@@ -729,20 +729,61 @@ fn view_progress_screen<'a>(
         .align_y(iced::Alignment::Center)
     };
 
-    let subtitle = if state.done {
-        let mut parts = vec![
-            format!("{done_count} succeeded"),
-            format!("{failed_count} failed"),
-        ];
+    let subtitle: Element<'_, Message> = if state.done {
+        let mut counts = row![].spacing(6).align_y(iced::Alignment::Center);
+
+        counts = counts
+            .push(
+                text(char::from(Icon::CircleCheck))
+                    .size(13)
+                    .font(LUCIDE_FONT)
+                    .color(STATUS_GREEN),
+            )
+            .push(
+                text(format!("{done_count} succeeded"))
+                    .size(13)
+                    .color(STATUS_GREEN),
+            );
+
+        counts = counts
+            .push(text("\u{00b7}").size(13).color(MUTED))
+            .push(
+                text(char::from(Icon::CircleX))
+                    .size(13)
+                    .font(LUCIDE_FONT)
+                    .color(if failed_count > 0 { STATUS_RED } else { MUTED }),
+            )
+            .push(
+                text(format!("{failed_count} failed"))
+                    .size(13)
+                    .color(if failed_count > 0 { STATUS_RED } else { MUTED }),
+            );
+
         if cancelled_count > 0 {
-            parts.push(format!("{cancelled_count} cancelled"));
+            counts = counts
+                .push(text("\u{00b7}").size(13).color(MUTED))
+                .push(
+                    text(char::from(Icon::CircleX))
+                        .size(13)
+                        .font(LUCIDE_FONT)
+                        .color(STATUS_AMBER),
+                )
+                .push(
+                    text(format!("{cancelled_count} cancelled"))
+                        .size(13)
+                        .color(STATUS_AMBER),
+                );
         }
-        text(parts.join(", ")).size(13).color(MUTED)
+
+        counts.into()
     } else if dry_run {
-        text(labels.dry_run_warning).size(13).color(STATUS_AMBER)
+        text(labels.dry_run_warning)
+            .size(13)
+            .color(STATUS_AMBER)
+            .into()
     } else {
         let name = names.get(state.current).unwrap_or(&"...");
-        text(*name).size(13).color(MUTED)
+        text(*name).size(13).color(MUTED).into()
     };
 
     let completed = (done_count + failed_count + cancelled_count) as f32;
@@ -797,6 +838,30 @@ fn view_progress_screen<'a>(
         cancel_btn = cancel_btn.on_press(cancel_msg);
     }
 
+    let copy_btn: Element<'_, Message> = if state.done {
+        let (icon, label) = if state.copy_status {
+            (Icon::ClipboardCheck, "Copied!")
+        } else {
+            (Icon::Clipboard, "Copy log")
+        };
+        let mut btn = button(
+            row![
+                text(char::from(icon)).size(14).font(LUCIDE_FONT),
+                text(label).size(14),
+            ]
+            .spacing(6)
+            .align_y(iced::Alignment::Center),
+        )
+        .style(ghost_button_style)
+        .padding([8, 16]);
+        if !state.copy_status {
+            btn = btn.on_press(Message::CopyLog(state.log.clone()));
+        }
+        btn.into()
+    } else {
+        iced::widget::Space::new().into()
+    };
+
     let mut done_btn = button(text("Done").size(14))
         .style(continue_button_style)
         .padding([8, 20]);
@@ -807,8 +872,10 @@ fn view_progress_screen<'a>(
     let footer = row![
         cancel_btn,
         iced::widget::Space::new().width(Length::Fill),
+        copy_btn,
         done_btn,
     ]
+    .spacing(8)
     .width(Length::Fill);
 
     let content = column![
