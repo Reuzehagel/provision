@@ -10,47 +10,47 @@ Based on Tailwind's **zinc** scale for neutrals, with semantic accent colors.
 
 ### Neutrals (zinc)
 
-| Token           | Hex       | RGB (0–1)              | Usage                             |
-|-----------------|-----------|------------------------|-----------------------------------|
-| `BG`            | `#09090b` | `0.035, 0.035, 0.043`  | App background                    |
-| `CARD`          | `#18181b` | `0.094, 0.094, 0.106`  | Cards, surfaces                   |
-| `CARD_HOVER`    | `#27272a` | `0.153, 0.153, 0.165`  | Card hover state                  |
-| `BORDER`        | `#27272a` | `0.153, 0.153, 0.165`  | Default borders                   |
-| `BORDER_FOCUS`  | `#3f3f46` | `0.247, 0.247, 0.275`  | Focused/hover borders             |
-| `INPUT`         | `#27272a` | `0.153, 0.153, 0.165`  | Input field backgrounds           |
-| `MUTED`         | `#71717a` | `0.443, 0.443, 0.478`  | Muted/secondary text, icons       |
-| `MUTED_FG`      | `#a1a1aa` | `0.631, 0.631, 0.667`  | Descriptions, secondary content   |
-| `TEXT`          | `#fafafa` | `0.980, 0.980, 0.980`  | Primary text                      |
-| `TEXT_SECONDARY` | `#a1a1aa` | `0.631, 0.631, 0.667` | Subtitles, descriptions           |
+| Token            | Hex       | RGB (0–1)             | Usage                           |
+| ---------------- | --------- | --------------------- | ------------------------------- |
+| `BG`             | `#09090b` | `0.035, 0.035, 0.043` | App background                  |
+| `CARD`           | `#18181b` | `0.094, 0.094, 0.106` | Cards, surfaces                 |
+| `CARD_HOVER`     | `#27272a` | `0.153, 0.153, 0.165` | Card hover state                |
+| `BORDER`         | `#27272a` | `0.153, 0.153, 0.165` | Default borders                 |
+| `BORDER_FOCUS`   | `#3f3f46` | `0.247, 0.247, 0.275` | Focused/hover borders           |
+| `INPUT`          | `#27272a` | `0.153, 0.153, 0.165` | Input field backgrounds         |
+| `MUTED`          | `#71717a` | `0.443, 0.443, 0.478` | Muted/secondary text, icons     |
+| `MUTED_FG`       | `#a1a1aa` | `0.631, 0.631, 0.667` | Descriptions, secondary content |
+| `TEXT`           | `#fafafa` | `0.980, 0.980, 0.980` | Primary text                    |
+| `TEXT_SECONDARY` | `#a1a1aa` | `0.631, 0.631, 0.667` | Subtitles, descriptions         |
 
 ### Accent Colors
 
-| Token           | Hex       | RGB (0–1)              | Usage                             |
-|-----------------|-----------|------------------------|-----------------------------------|
-| `PRIMARY`       | `#3b82f6` | `0.231, 0.510, 0.965`  | Primary buttons, active states    |
-| `PRIMARY_HOVER` | `#2563eb` | `0.145, 0.388, 0.922`  | Primary button hover              |
-| `SUCCESS`       | `#10b981` | `0.063, 0.725, 0.506`  | Success states, "installed"       |
-| `SUCCESS_MUTED` | `#065f46` | `0.024, 0.373, 0.275`  | Success badge background          |
-| `DANGER`        | `#ef4444` | `0.937, 0.267, 0.267`  | Errors, cancel, destructive       |
-| `DANGER_HOVER`  | `#dc2626` | `0.863, 0.149, 0.149`  | Danger button hover               |
-| `WARNING`       | `#f59e0b` | `0.961, 0.620, 0.043`  | Warnings, "already installed"     |
-| `INFO`          | `#3b82f6` | `0.231, 0.510, 0.965`  | In-progress, informational        |
+| Token           | Hex       | RGB (0–1)             | Usage                          |
+| --------------- | --------- | --------------------- | ------------------------------ |
+| `PRIMARY`       | `#3b82f6` | `0.231, 0.510, 0.965` | Primary buttons, active states |
+| `PRIMARY_HOVER` | `#2563eb` | `0.145, 0.388, 0.922` | Primary button hover           |
+| `SUCCESS`       | `#10b981` | `0.063, 0.725, 0.506` | Success states, "installed"    |
+| `SUCCESS_MUTED` | `#065f46` | `0.024, 0.373, 0.275` | Success badge background       |
+| `DANGER`        | `#ef4444` | `0.937, 0.267, 0.267` | Errors, cancel, destructive    |
+| `DANGER_HOVER`  | `#dc2626` | `0.863, 0.149, 0.149` | Danger button hover            |
+| `WARNING`       | `#f59e0b` | `0.961, 0.620, 0.043` | Warnings, "already installed"  |
+| `INFO`          | `#3b82f6` | `0.231, 0.510, 0.965` | In-progress, informational     |
 
 ---
 
 ## Typography
 
-| Element           | Size | Weight  | Color            |
-|-------------------|------|---------|------------------|
-| App title         | 28px | Default | `TEXT`           |
-| Screen heading    | 18px | Default | `TEXT`           |
-| Subtitle          | 12px | Default | `TEXT_SECONDARY`  |
-| Card title        | 14px | Default | `TEXT`           |
-| Card description  | 12px | Default | `MUTED_FG`       |
-| Body / labels     | 13px | Default | `TEXT`           |
-| Small / caption   | 11px | Default | `MUTED`          |
-| Category label    | 10px | Default | `MUTED` (uppercase, tracked) |
-| Terminal text     | 11px | Mono    | `MUTED_FG`       |
+| Element          | Size | Weight  | Color                        |
+| ---------------- | ---- | ------- | ---------------------------- |
+| App title        | 28px | Default | `TEXT`                       |
+| Screen heading   | 18px | Default | `TEXT`                       |
+| Subtitle         | 12px | Default | `TEXT_SECONDARY`             |
+| Card title       | 14px | Default | `TEXT`                       |
+| Card description | 12px | Default | `MUTED_FG`                   |
+| Body / labels    | 13px | Default | `TEXT`                       |
+| Small / caption  | 11px | Default | `MUTED`                      |
+| Category label   | 10px | Default | `MUTED` (uppercase, tracked) |
+| Terminal text    | 11px | Mono    | `MUTED_FG`                   |
 
 ---
 
@@ -59,7 +59,7 @@ Based on Tailwind's **zinc** scale for neutrals, with semantic accent colors.
 Consistent spacing scale (multiples of 4):
 
 | Token | Value | Usage                              |
-|-------|-------|------------------------------------|
+| ----- | ----- | ---------------------------------- |
 | `xs`  | 4px   | Tight inline gaps                  |
 | `sm`  | 8px   | Within groups, icon-to-label       |
 | `md`  | 12px  | Between related elements           |
@@ -77,16 +77,16 @@ Consistent spacing scale (multiples of 4):
 
 ## Border Radius
 
-| Element         | Radius |
-|-----------------|--------|
-| Cards           | 8px    |
-| Buttons         | 6px    |
-| Badges          | 4px    |
-| Input fields    | 6px    |
-| Terminal box    | 6px    |
-| Progress bar    | 4px    |
+| Element      | Radius |
+| ------------ | ------ |
+| Cards        | 8px    |
+| Buttons      | 6px    |
+| Badges       | 4px    |
+| Input fields | 6px    |
+| Terminal box | 6px    |
+| Progress bar | 4px    |
 
-*(Tighter than current 12px/8px — shadcn uses subtle rounding)*
+_(Tighter than current 12px/8px — shadcn uses subtle rounding)_
 
 ---
 
@@ -202,12 +202,12 @@ Named constants via `Icon` enum: `Icon::ArrowLeft`, `Icon::ChevronLeft`, `Icon::
 
 ### Icon Sizes
 
-| Context          | Size |
-|-----------------|------|
-| Profile card     | 20px |
-| Back button      | 16px |
-| Status icons     | 14px |
-| Inline badges    | 12px |
+| Context       | Size |
+| ------------- | ---- |
+| Profile card  | 20px |
+| Back button   | 16px |
+| Status icons  | 14px |
+| Inline badges | 12px |
 
 ---
 
@@ -243,18 +243,18 @@ Named constants via `Icon` enum: `Icon::ArrowLeft`, `Icon::ChevronLeft`, `Icon::
 │     153 packages detected            │
 │                                      │
 │  ┌──────────────┐ ┌──────────────┐   │
-│  │ 🏠 Personal  │ │ 💼 Work      │   │
+│  │ Personal     │ │ Work         │   │
 │  │ Browsers,    │ │ Dev tools,   │   │
 │  │ media, ...   │ │ comms, ...   │   │
 │  └──────────────┘ └──────────────┘   │
 │  ┌──────────────┐ ┌──────────────┐   │
-│  │ 🖥 Homelab   │ │ ⚙ Manual     │   │
+│  │ Homelab      │ │ Manual       │   │
 │  │ Server util, │ │ Start from   │   │
 │  │ containers   │ │ scratch      │   │
 │  └──────────────┘ └──────────────┘   │
 │                                      │
 │  ┌──────────────────────────────┐    │
-│  │ 🔄 Update                    │    │
+│  │ Update                       │    │
 │  │ Check for outdated packages  │    │
 │  └──────────────────────────────┘    │
 └──────────────────────────────────────┘

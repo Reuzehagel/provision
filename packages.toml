@@ -11,14 +11,6 @@ winget_id = "Mozilla.Firefox"
 profiles = []
 
 [[packages]]
-id = "chrome"
-name = "Google Chrome"
-description = "Google's fast, widely-used browser"
-category = "browsers"
-winget_id = "Google.Chrome"
-profiles = []
-
-[[packages]]
 id = "brave"
 name = "Brave"
 description = "Privacy-first browser with built-in ad blocking"
@@ -121,9 +113,9 @@ profiles = []
 [[packages]]
 id = "zed"
 name = "Zed"
-description = "High-performance collaborative code editor"
+description = "Rust based code editor"
 category = "development"
-winget_id = "Zed.Zed"
+winget_id = "ZedIndustries.Zed"
 profiles = []
 
 [[packages]]
@@ -155,7 +147,7 @@ id = "python"
 name = "Python"
 description = "General-purpose programming language"
 category = "development"
-winget_id = "Python.Python.3.12"
+winget_id = "Python.PythonInstallManager"
 profiles = []
 
 [[packages]]
@@ -220,6 +212,30 @@ name = "AutoHotkey"
 description = "Scripting language for desktop automation"
 category = "development"
 winget_id = "AutoHotkey.AutoHotkey"
+profiles = []
+
+[[packages]]
+id = "notepadpp"
+name = "Notepad++"
+description = "Lightweight, feature-rich text editor"
+category = "development"
+winget_id = "Notepad++.Notepad++"
+profiles = []
+
+[[packages]]
+id = "github-desktop"
+name = "GitHub Desktop"
+description = "Git GUI client from GitHub"
+category = "development"
+winget_id = "GitHub.GitHubDesktop"
+profiles = []
+
+[[packages]]
+id = "powershell"
+name = "PowerShell 7"
+description = "Modern cross-platform PowerShell"
+category = "development"
+winget_id = "Microsoft.PowerShell"
 profiles = []
 
 [[packages]]
@@ -304,6 +320,14 @@ category = "documents"
 winget_id = "SumatraPDF.SumatraPDF"
 profiles = []
 
+[[packages]]
+id = "pandoc"
+name = "Pandoc"
+description = "Universal document converter"
+category = "documents"
+winget_id = "JohnMacFarlane.Pandoc"
+profiles = []
+
 # ── Games ─────────────────────────────────────────────────
 
 [[packages]]
@@ -344,6 +368,14 @@ name = "Prism Launcher"
 description = "Open-source Minecraft launcher"
 category = "games"
 winget_id = "PrismLauncher.PrismLauncher"
+profiles = []
+
+[[packages]]
+id = "modrinth"
+name = "Modrinth App"
+description = "Open-source Minecraft mod manager"
+category = "games"
+winget_id = "Modrinth.ModrinthApp"
 profiles = []
 
 # ── Microsoft Tools ───────────────────────────────────────
@@ -537,6 +569,14 @@ winget_id = "REALiX.HWiNFO"
 profiles = []
 
 [[packages]]
+id = "wiztree"
+name = "WizTree"
+description = "Blazing fast disk space analyzer"
+category = "utilities"
+winget_id = "AntibodySoftware.WizTree"
+profiles = []
+
+[[packages]]
 id = "localsend"
 name = "LocalSend"
 description = "Local network file sharing (AirDrop alternative)"
@@ -557,7 +597,7 @@ id = "raycast"
 name = "Raycast"
 description = "Productivity launcher and command palette"
 category = "utilities"
-winget_id = "Raycast.Raycast"
+winget_id = "9PFXXSHC64H3"
 profiles = []
 
 # ── Security & Privacy ───────────────────────────────────
@@ -591,10 +631,42 @@ id = "proton-vpn"
 name = "Proton VPN"
 description = "Privacy-focused VPN service"
 category = "security-privacy"
-winget_id = "ProtonTechnologies.ProtonVPN"
+winget_id = "Proton.ProtonVPN"
+profiles = []
+
+[[packages]]
+id = "proton-mail-bridge"
+name = "Proton Mail Bridge"
+description = "Use Proton Mail with desktop email clients"
+category = "security-privacy"
+winget_id = "Proton.ProtonMailBridge"
+profiles = []
+
+[[packages]]
+id = "proton-auth"
+name = "Proton Authenticator"
+description = "Two-factor authentication from Proton"
+category = "security-privacy"
+winget_id = "Proton.ProtonAuthenticator"
 profiles = []
 
 # ── Design ────────────────────────────────────────────────
+
+[[packages]]
+id = "figma"
+name = "Figma"
+description = "Collaborative interface design tool"
+category = "design"
+winget_id = "Figma.Figma"
+profiles = []
+
+[[packages]]
+id = "affinity"
+name = "Affinity"
+description = "Professional creative suite"
+category = "design"
+winget_id = "Canva.Affinity"
+profiles = []
 
 [[packages]]
 id = "canva"
