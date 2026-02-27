@@ -39,7 +39,7 @@ Iced (0.14) Elm-style architecture: **State → Message → Update → View**.
 - **`src/settings.rs`** — `WingetSettings` struct with session-only winget flag configuration. `InstallMode`, `InstallScope`, `Architecture` enums with Display impls for pick_list. `OptionalScope`/`OptionalArchitecture` newtypes showing "Default" for `None`. `install_args()` builds extra CLI flags for install/upgrade commands.
 - **`src/profile.rs`** — `Profile` enum (Personal, Work, Manual) with metadata methods (`title`, `description`, `icon`, `slug`) and `Profile::ALL` constant.
 - **`src/theme.rs`** — Custom theme via `Theme::custom("provision", Palette { ... })` with Tailwind zinc neutrals and blue/emerald/red/amber accents.
-- **`packages.toml`** — 73-package catalog (10 categories) embedded in the binary at compile time. Each entry has `id`, `name`, `description`, `category`, `winget_id`, `profiles`, and optional `post_install`/`install_command`.
+- **`packages.toml`** — 82-package catalog (10 categories) embedded in the binary at compile time. Each entry has `id`, `name`, `description`, `category`, `winget_id`, `profiles`, and optional `post_install`/`install_command`.
 - **`DESIGN.md`** — Design system reference (color tokens, spacing, component patterns).
 
 Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*` method on `App`.

@@ -23,20 +23,20 @@ Download the latest release from the [Releases](../../releases) page and run the
 
 ## Package catalog
 
-68 packages across 10 categories, embedded in the binary (no network needed to browse):
+82 packages across 10 categories, embedded in the binary (no network needed to browse):
 
 | Category | Packages |
 |---|---|
-| Browsers | Firefox, Chrome, Brave, Vivaldi, Zen |
+| Browsers | Firefox, Brave, Vivaldi, Zen, Helium |
 | Communication | Discord, Slack, Teams, Zoom, Telegram, Signal, WhatsApp |
-| Development | VS Code, Zed, Neovim, JetBrains, Node+Bun, Python/UV, Rust, Go, Git, Docker, Windows Terminal, Oh My Posh, GitHub CLI, AutoHotkey |
-| Documents | Obsidian, Notion, LibreOffice, Adobe Reader, SumatraPDF |
-| Games | Steam, Epic, GOG, EA, Prism Launcher |
+| Development | VS Code, Zed, Neovim, JetBrains, Node.js, Bun, Python, uv, Rust, Go, Git, Docker, Windows Terminal, Oh My Posh, GitHub CLI, GitHub Desktop, AutoHotkey, Notepad++, PowerShell 7, Starship, fzf, fd |
+| Documents | Obsidian, Notion, LibreOffice, Adobe Reader, SumatraPDF, Pandoc |
+| Games | Steam, Epic, GOG, EA, Prism Launcher, Modrinth |
 | Microsoft Tools | PowerToys, Dev Home, WSL, Sysinternals, App Installer |
 | Multimedia | Spotify, VLC, OBS, Audacity, GIMP, HandBrake, FFmpeg, LosslessCut, ShareX |
-| Utilities | 7-Zip, Everything, Directory Opus, Bitwarden, Claude, croc, Ente Auth, AltSnap, HWiNFO, LocalSend, Nilesoft Shell, Raycast, Helium |
-| Security & Privacy | Proton Drive, Proton Mail, Proton Pass, Proton VPN |
-| Design | Canva |
+| Utilities | 7-Zip, Everything, Directory Opus, Bitwarden, Claude, croc, Ente Auth, AltSnap, HWiNFO, WizTree, LocalSend, Nilesoft Shell, Raycast |
+| Security & Privacy | Proton Drive, Proton Mail, Proton Pass, Proton VPN, Proton Mail Bridge, Proton Authenticator |
+| Design | Figma, Affinity, Canva |
 
 Packages map to winget IDs. Some have post-install commands (Node installs Bun). WSL uses `wsl --install` instead of winget.
 
