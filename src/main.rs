@@ -19,9 +19,9 @@ use upgrade::UpgradeablePackage;
 impl App {
     /// Check whether a package from the catalog is already installed.
     pub(crate) fn is_installed(&self, pkg: &Package) -> bool {
-        pkg.winget_id
+        pkg.winget_id_lower
             .as_ref()
-            .is_some_and(|wid| self.installed.contains_key(&wid.to_lowercase()))
+            .is_some_and(|wid| self.installed.contains_key(wid))
     }
 }
 
@@ -312,424 +312,499 @@ pub(crate) enum Message {
     KeyIgnored,
 }
 
+/// Toggle a set of IDs: if all are selected, deselect all; otherwise select all.
+fn toggle_set(set: &mut HashSet<String>, ids: Vec<String>) {
+    let all_selected = ids.iter().all(|id| set.contains(id));
+    if all_selected {
+        for id in &ids {
+            set.remove(id);
+        }
+    } else {
+        set.extend(ids);
+    }
+}
+
 impl App {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::InstalledScanProgress(event) => match event {
-                upgrade::InstalledScanProgress::Activity { .. } => {}
-                upgrade::InstalledScanProgress::Completed { packages } => {
-                    for pkg in packages {
-                        self.installed.insert(pkg.winget_id, pkg.version);
-                    }
-                    self.installed_scan_done = true;
-                    self._installed_scan_handle = None;
-                }
-                upgrade::InstalledScanProgress::Failed { .. } => {
-                    self.installed_scan_done = true;
-                    self._installed_scan_handle = None;
-                }
-            },
-            Message::ProfileSelected(profile) => {
-                self.selected_profile = Some(profile);
-                let mut selection = catalog::default_selection(&self.catalog, profile);
-                if self.installed_scan_done {
-                    for pkg in &self.catalog {
-                        if self.is_installed(pkg) {
-                            selection.remove(&pkg.id);
-                        }
-                    }
-                }
-                self.selected = selection;
-                self.search.clear();
-                self.screen = Screen::PackageSelect;
-            }
-            Message::GoBack => match self.screen {
-                Screen::Review => {
-                    self.screen = Screen::PackageSelect;
-                }
-                Screen::UpdateScanning => {
-                    self.update_scan._handle = None;
-                    self.screen = Screen::ProfileSelect;
-                }
-                Screen::UpdateSelect => {
-                    self.screen = Screen::ProfileSelect;
-                }
-                Screen::Settings => {
-                    self.screen = Screen::ProfileSelect;
-                }
-                _ => {
-                    self.search.clear();
-                    self.screen = Screen::ProfileSelect;
-                }
-            },
+            // ── Domain handlers ──────────────────────────────────────
+            Message::InstalledScanProgress(e) => self.handle_installed_scan_progress(e),
+            Message::ProfileSelected(p) => self.handle_profile_selected(p),
+            Message::GoBack => self.handle_go_back(),
+            Message::StartInstall => self.handle_start_install(),
+            Message::CancelInstall => self.handle_cancel_install(),
+            Message::InstallProgress(e) => self.handle_install_progress(e),
+            Message::FinishAndReset => self.handle_finish_and_reset(),
+            Message::StartUpdateScan => self.handle_start_update_scan(),
+            Message::CancelUpdateScan => self.handle_cancel_update_scan(),
+            Message::UpdateScanProgress(e) => self.handle_update_scan_progress(e),
+            Message::StartUpgrade => self.handle_start_upgrade(),
+            Message::CancelUpgrade => self.handle_cancel_upgrade(),
+            Message::UpgradeProgress(e) => self.handle_upgrade_progress(e),
+            Message::FinishUpdateAndReset => self.handle_finish_update_and_reset(),
+            Message::ToggleCategory(cat) => self.handle_toggle_category(cat),
+            Message::SelectAll => self.handle_select_all(),
+            Message::ExportSelection => self.handle_export_selection(),
+            Message::ExportCompleted(r) => self.handle_export_completed(r),
+            Message::ImportSelection => self.handle_import_selection(),
+            Message::ImportCompleted(r) => self.handle_import_completed(r),
+            Message::CopyLog(lines) => self.handle_copy_log(lines),
+            Message::KeyConfirm => self.handle_key_confirm(),
+            Message::KeyEscape => self.handle_key_escape(),
+            // ── Inline one-liners ────────────────────────────────────
             Message::TogglePackage(id) => {
                 if !self.selected.remove(&id) {
                     self.selected.insert(id);
                 }
+                Task::none()
             }
-            Message::SearchChanged(value) => {
-                self.search = value;
-            }
-            Message::GoToReview => {
-                self.screen = Screen::Review;
-            }
-            Message::StartInstall => {
-                let queue: Vec<Package> = self
-                    .catalog
-                    .iter()
-                    .filter(|p| self.selected.contains(&p.id))
-                    .cloned()
-                    .collect();
-
-                self.install.start(queue.len());
-                self.install_queue = queue.clone();
-                self.screen = Screen::Installing;
-
-                let dry = self.dry_run;
-                let extra = self.settings.install_args();
-                let (task, handle) = Task::run(
-                    install::install_all(queue, dry, extra),
-                    Message::InstallProgress,
-                )
-                .abortable();
-
-                self.install._handle = Some(handle.abort_on_drop());
-                return task;
-            }
-            Message::CancelInstall => {
-                self.install.cancel("Installation");
-            }
-            Message::InstallProgress(event) => {
-                let queue = &self.install_queue;
-                self.install.handle_event(&event, |i| {
-                    let name = queue.get(i).map(|p| p.name.as_str()).unwrap_or("...");
-                    format!("Installing {name}")
-                });
-            }
-            Message::FinishAndReset => {
-                self.selected_profile = None;
-                self.selected.clear();
-                self.search.clear();
-                self.install_queue.clear();
-                self.install = ProgressState::default();
-                self.screen = Screen::ProfileSelect;
-            }
-            Message::StartUpdateScan => {
-                self.update_scan = UpdateScanState::default();
-                self.search.clear();
-                self.screen = Screen::UpdateScanning;
-
-                let dry = self.dry_run;
-                let include_unknown = self.settings.include_unknown;
-                let (task, handle) = Task::run(
-                    upgrade::scan_upgrades(dry, include_unknown),
-                    Message::UpdateScanProgress,
-                )
-                .abortable();
-
-                self.update_scan._handle = Some(handle.abort_on_drop());
-                return task;
-            }
-            Message::CancelUpdateScan => {
-                self.update_scan._handle = None;
-                self.screen = Screen::ProfileSelect;
-            }
-            Message::UpdateScanProgress(event) => match event {
-                upgrade::ScanProgress::Activity { line } => {
-                    self.update_scan.live_line = line;
-                }
-                upgrade::ScanProgress::Log { line } => {
-                    self.update_scan.log.push(line);
-                    self.update_scan.live_line.clear();
-                    if self.update_scan.log.len() > LOG_CAP {
-                        self.update_scan
-                            .log
-                            .drain(..self.update_scan.log.len() - LOG_CAP);
-                    }
-                }
-                upgrade::ScanProgress::Completed { packages } => {
-                    self.update_scan.done = true;
-                    self.update_scan.live_line.clear();
-                    self.update_scan._handle = None;
-                    if packages.is_empty() {
-                        self.update_scan.packages = packages;
-                    } else {
-                        self.update_scan.selected =
-                            packages.iter().map(|p| p.winget_id.clone()).collect();
-                        self.update_scan.packages = packages;
-                        self.screen = Screen::UpdateSelect;
-                    }
-                }
-                upgrade::ScanProgress::Failed { error } => {
-                    self.update_scan.done = true;
-                    self.update_scan.error = Some(error);
-                    self.update_scan.live_line.clear();
-                    self.update_scan._handle = None;
-                }
-            },
             Message::ToggleUpgradePackage(id) => {
                 if !self.update_scan.selected.remove(&id) {
                     self.update_scan.selected.insert(id);
                 }
+                Task::none()
             }
-            Message::StartUpgrade => {
-                let queue: Vec<UpgradeablePackage> = self
-                    .update_scan
-                    .packages
-                    .iter()
-                    .filter(|p| self.update_scan.selected.contains(&p.winget_id))
-                    .cloned()
-                    .collect();
-
-                self.upgrade.start(queue.len());
-                self.upgrade_queue = queue.clone();
-                self.screen = Screen::Updating;
-
-                let dry = self.dry_run;
-                let extra = self.settings.install_args();
-                let (task, handle) = Task::run(
-                    upgrade::upgrade_all(queue, dry, extra),
-                    Message::UpgradeProgress,
-                )
-                .abortable();
-
-                self.upgrade._handle = Some(handle.abort_on_drop());
-                return task;
+            Message::SearchChanged(v) => {
+                self.search = v;
+                Task::none()
             }
-            Message::CancelUpgrade => {
-                self.upgrade.cancel("Upgrade");
+            Message::GoToReview => {
+                self.screen = Screen::Review;
+                Task::none()
             }
-            Message::UpgradeProgress(event) => {
-                let queue = &self.upgrade_queue;
-                self.upgrade.handle_event(&event, |i| {
-                    let name = queue.get(i).map(|p| p.name.as_str()).unwrap_or("...");
-                    format!("Upgrading {name}")
-                });
-            }
-            Message::FinishUpdateAndReset => {
-                self.update_scan = UpdateScanState::default();
-                self.upgrade_queue.clear();
-                self.upgrade = ProgressState::default();
-                self.screen = Screen::ProfileSelect;
-            }
-            Message::ToggleCategory(cat) => {
-                let cat_ids: Vec<String> = self
-                    .catalog
-                    .iter()
-                    .filter(|p| p.category == cat)
-                    .map(|p| p.id.clone())
-                    .collect();
-                let all_selected = cat_ids.iter().all(|id| self.selected.contains(id));
-                if all_selected {
-                    for id in &cat_ids {
-                        self.selected.remove(id);
-                    }
-                } else {
-                    for id in cat_ids {
-                        self.selected.insert(id);
-                    }
-                }
-            }
-            Message::ExportSelection => {
-                let selected = self.selected.clone();
-                return Task::perform(
-                    catalog::export_selection(selected),
-                    Message::ExportCompleted,
-                );
-            }
-            Message::ExportCompleted(result) => {
-                match result {
-                    Ok(()) => {
-                        self.selection_status = Some("Selection exported".into());
-                    }
-                    Err(msg) if msg.is_empty() => return Task::none(),
-                    Err(msg) => {
-                        self.selection_status = Some(format!("Export failed: {msg}"));
-                    }
-                }
-                return Task::perform(
-                    async {
-                        tokio::time::sleep(std::time::Duration::from_secs(4)).await;
-                    },
-                    |_| Message::ClearSelectionStatus,
-                );
-            }
-            Message::ImportSelection => {
-                let valid_ids: HashSet<String> =
-                    self.catalog.iter().map(|p| p.id.clone()).collect();
-                return Task::perform(
-                    catalog::import_selection(valid_ids),
-                    Message::ImportCompleted,
-                );
-            }
-            Message::ImportCompleted(result) => {
-                match result {
-                    Ok(ids) => {
-                        let count = ids.len();
-                        self.selected = ids;
-                        self.selection_status = Some(format!("{count} packages imported"));
-                    }
-                    Err(msg) if msg.is_empty() => return Task::none(),
-                    Err(msg) => {
-                        self.selection_status = Some(format!("Import failed: {msg}"));
-                    }
-                }
-                return Task::perform(
-                    async {
-                        tokio::time::sleep(std::time::Duration::from_secs(4)).await;
-                    },
-                    |_| Message::ClearSelectionStatus,
-                );
+            Message::OpenSettings => {
+                self.screen = Screen::Settings;
+                Task::none()
             }
             Message::ClearSelectionStatus => {
                 self.selection_status = None;
-            }
-            Message::CopyLog(lines) => {
-                // Build clipboard text: summary header + log lines
-                let state = match self.screen {
-                    Screen::Updating => &self.upgrade,
-                    _ => &self.install,
-                };
-                let (done, failed, cancelled) = state.status_counts();
-                let mut header = format!("{done} succeeded, {failed} failed");
-                if cancelled > 0 {
-                    header.push_str(&format!(", {cancelled} cancelled"));
-                }
-                let text = format!("{header}\n\n{}", lines.join("\n"));
-
-                match self.screen {
-                    Screen::Updating => self.upgrade.copy_status = true,
-                    _ => self.install.copy_status = true,
-                }
-
-                return Task::batch([
-                    clipboard::write(text),
-                    Task::perform(
-                        async {
-                            tokio::time::sleep(std::time::Duration::from_secs(4)).await;
-                        },
-                        |_| Message::ClearCopyStatus,
-                    ),
-                ]);
+                Task::none()
             }
             Message::ClearCopyStatus => {
                 self.install.copy_status = false;
                 self.upgrade.copy_status = false;
-            }
-            Message::OpenSettings => {
-                self.screen = Screen::Settings;
+                Task::none()
             }
             Message::SetInstallMode(mode) => {
                 self.settings.install_mode = mode;
+                Task::none()
             }
             Message::SetScope(opt) => {
                 self.settings.scope = opt.0;
+                Task::none()
             }
             Message::SetArchitecture(opt) => {
                 self.settings.architecture = opt.0;
+                Task::none()
             }
             Message::ToggleForce(v) => {
                 self.settings.force = v;
+                Task::none()
             }
             Message::ToggleIncludeUnknown(v) => {
                 self.settings.include_unknown = v;
+                Task::none()
             }
             Message::ToggleIgnoreSecurityHash(v) => {
                 self.settings.ignore_security_hash = v;
+                Task::none()
             }
             Message::ToggleDisableInteractivity(v) => {
                 self.settings.disable_interactivity = v;
+                Task::none()
             }
             Message::SetInstallLocation(v) => {
                 self.settings.install_location = v;
+                Task::none()
             }
-            Message::KeyIgnored => {}
-            Message::KeyConfirm => {
-                return match self.screen {
-                    Screen::PackageSelect if !self.selected.is_empty() => {
-                        self.update(Message::GoToReview)
-                    }
-                    Screen::Review => self.update(Message::StartInstall),
-                    Screen::Installing if self.install.done => self.update(Message::FinishAndReset),
-                    Screen::UpdateScanning if self.update_scan.done => self.update(Message::GoBack),
-                    Screen::UpdateSelect if !self.update_scan.selected.is_empty() => {
-                        self.update(Message::StartUpgrade)
-                    }
-                    Screen::Updating if self.upgrade.done => {
-                        self.update(Message::FinishUpdateAndReset)
-                    }
-                    _ => Task::none(),
-                };
-            }
-            Message::KeyEscape => {
-                return match self.screen {
-                    Screen::PackageSelect
-                    | Screen::Review
-                    | Screen::UpdateSelect
-                    | Screen::Settings => self.update(Message::GoBack),
-                    Screen::Installing if !self.install.done => self.update(Message::CancelInstall),
-                    Screen::UpdateScanning if !self.update_scan.done => {
-                        self.update(Message::CancelUpdateScan)
-                    }
-                    Screen::Updating if !self.upgrade.done => self.update(Message::CancelUpgrade),
-                    _ => Task::none(),
-                };
-            }
-            Message::SelectAll => {
-                let search_lower = self.search.to_lowercase();
-                match self.screen {
-                    Screen::PackageSelect => {
-                        let visible_ids: Vec<String> = self
-                            .catalog
-                            .iter()
-                            .filter(|p| {
-                                search_lower.is_empty()
-                                    || p.name.to_lowercase().contains(&search_lower)
-                                    || p.description.to_lowercase().contains(&search_lower)
-                            })
-                            .map(|p| p.id.clone())
-                            .collect();
-                        let all_selected = visible_ids.iter().all(|id| self.selected.contains(id));
-                        if all_selected {
-                            for id in &visible_ids {
-                                self.selected.remove(id);
-                            }
-                        } else {
-                            for id in visible_ids {
-                                self.selected.insert(id);
-                            }
-                        }
-                    }
-                    Screen::UpdateSelect => {
-                        let visible_ids: Vec<String> = self
-                            .update_scan
-                            .packages
-                            .iter()
-                            .filter(|p| {
-                                search_lower.is_empty()
-                                    || p.name.to_lowercase().contains(&search_lower)
-                                    || p.winget_id.to_lowercase().contains(&search_lower)
-                            })
-                            .map(|p| p.winget_id.clone())
-                            .collect();
-                        let all_selected = visible_ids
-                            .iter()
-                            .all(|id| self.update_scan.selected.contains(id));
-                        if all_selected {
-                            for id in &visible_ids {
-                                self.update_scan.selected.remove(id);
-                            }
-                        } else {
-                            for id in visible_ids {
-                                self.update_scan.selected.insert(id);
-                            }
-                        }
-                    }
-                    _ => {}
+            Message::KeyIgnored => Task::none(),
+        }
+    }
+
+    // ── Navigation & lifecycle ───────────────────────────────────
+
+    fn handle_installed_scan_progress(
+        &mut self,
+        event: upgrade::InstalledScanProgress,
+    ) -> Task<Message> {
+        match event {
+            upgrade::InstalledScanProgress::Activity { .. } => {}
+            upgrade::InstalledScanProgress::Completed { packages } => {
+                for pkg in packages {
+                    self.installed.insert(pkg.winget_id, pkg.version);
                 }
+                self.installed_scan_done = true;
+                self._installed_scan_handle = None;
+            }
+            upgrade::InstalledScanProgress::Failed { .. } => {
+                self.installed_scan_done = true;
+                self._installed_scan_handle = None;
             }
         }
         Task::none()
+    }
+
+    fn handle_profile_selected(&mut self, profile: Profile) -> Task<Message> {
+        self.selected_profile = Some(profile);
+        let mut selection = catalog::default_selection(&self.catalog, profile);
+        if self.installed_scan_done {
+            for pkg in &self.catalog {
+                if self.is_installed(pkg) {
+                    selection.remove(&pkg.id);
+                }
+            }
+        }
+        self.selected = selection;
+        self.search.clear();
+        self.screen = Screen::PackageSelect;
+        Task::none()
+    }
+
+    fn handle_go_back(&mut self) -> Task<Message> {
+        match self.screen {
+            Screen::Review => {
+                self.screen = Screen::PackageSelect;
+            }
+            Screen::UpdateScanning => {
+                self.update_scan._handle = None;
+                self.screen = Screen::ProfileSelect;
+            }
+            Screen::UpdateSelect | Screen::Settings => {
+                self.screen = Screen::ProfileSelect;
+            }
+            _ => {
+                self.search.clear();
+                self.screen = Screen::ProfileSelect;
+            }
+        }
+        Task::none()
+    }
+
+    fn handle_finish_and_reset(&mut self) -> Task<Message> {
+        self.selected_profile = None;
+        self.selected.clear();
+        self.search.clear();
+        self.install_queue.clear();
+        self.install = ProgressState::default();
+        self.screen = Screen::ProfileSelect;
+        Task::none()
+    }
+
+    fn handle_finish_update_and_reset(&mut self) -> Task<Message> {
+        self.update_scan = UpdateScanState::default();
+        self.upgrade_queue.clear();
+        self.upgrade = ProgressState::default();
+        self.screen = Screen::ProfileSelect;
+        Task::none()
+    }
+
+    // ── Install flow ─────────────────────────────────────────────
+
+    fn handle_start_install(&mut self) -> Task<Message> {
+        let queue: Vec<Package> = self
+            .catalog
+            .iter()
+            .filter(|p| self.selected.contains(&p.id))
+            .cloned()
+            .collect();
+
+        self.install.start(queue.len());
+        self.install_queue = queue.clone();
+        self.screen = Screen::Installing;
+
+        let dry = self.dry_run;
+        let extra = self.settings.install_args();
+        let (task, handle) = Task::run(
+            install::install_all(queue, dry, extra),
+            Message::InstallProgress,
+        )
+        .abortable();
+
+        self.install._handle = Some(handle.abort_on_drop());
+        task
+    }
+
+    fn handle_cancel_install(&mut self) -> Task<Message> {
+        self.install.cancel("Installation");
+        Task::none()
+    }
+
+    fn handle_install_progress(&mut self, event: install::InstallProgress) -> Task<Message> {
+        let queue = &self.install_queue;
+        self.install.handle_event(&event, |i| {
+            let name = queue.get(i).map(|p| p.name.as_str()).unwrap_or("...");
+            format!("Installing {name}")
+        });
+        Task::none()
+    }
+
+    // ── Update scan flow ─────────────────────────────────────────
+
+    fn handle_start_update_scan(&mut self) -> Task<Message> {
+        self.update_scan = UpdateScanState::default();
+        self.search.clear();
+        self.screen = Screen::UpdateScanning;
+
+        let dry = self.dry_run;
+        let include_unknown = self.settings.include_unknown;
+        let (task, handle) = Task::run(
+            upgrade::scan_upgrades(dry, include_unknown),
+            Message::UpdateScanProgress,
+        )
+        .abortable();
+
+        self.update_scan._handle = Some(handle.abort_on_drop());
+        task
+    }
+
+    fn handle_cancel_update_scan(&mut self) -> Task<Message> {
+        self.update_scan._handle = None;
+        self.screen = Screen::ProfileSelect;
+        Task::none()
+    }
+
+    fn handle_update_scan_progress(&mut self, event: upgrade::ScanProgress) -> Task<Message> {
+        match event {
+            upgrade::ScanProgress::Activity { line } => {
+                self.update_scan.live_line = line;
+            }
+            upgrade::ScanProgress::Log { line } => {
+                self.update_scan.log.push(line);
+                self.update_scan.live_line.clear();
+                if self.update_scan.log.len() > LOG_CAP {
+                    self.update_scan
+                        .log
+                        .drain(..self.update_scan.log.len() - LOG_CAP);
+                }
+            }
+            upgrade::ScanProgress::Completed { packages } => {
+                self.update_scan.done = true;
+                self.update_scan.live_line.clear();
+                self.update_scan._handle = None;
+                if packages.is_empty() {
+                    self.update_scan.packages = packages;
+                } else {
+                    self.update_scan.selected =
+                        packages.iter().map(|p| p.winget_id.clone()).collect();
+                    self.update_scan.packages = packages;
+                    self.screen = Screen::UpdateSelect;
+                }
+            }
+            upgrade::ScanProgress::Failed { error } => {
+                self.update_scan.done = true;
+                self.update_scan.error = Some(error);
+                self.update_scan.live_line.clear();
+                self.update_scan._handle = None;
+            }
+        }
+        Task::none()
+    }
+
+    // ── Upgrade flow ─────────────────────────────────────────────
+
+    fn handle_start_upgrade(&mut self) -> Task<Message> {
+        let queue: Vec<UpgradeablePackage> = self
+            .update_scan
+            .packages
+            .iter()
+            .filter(|p| self.update_scan.selected.contains(&p.winget_id))
+            .cloned()
+            .collect();
+
+        self.upgrade.start(queue.len());
+        self.upgrade_queue = queue.clone();
+        self.screen = Screen::Updating;
+
+        let dry = self.dry_run;
+        let extra = self.settings.install_args();
+        let (task, handle) = Task::run(
+            upgrade::upgrade_all(queue, dry, extra),
+            Message::UpgradeProgress,
+        )
+        .abortable();
+
+        self.upgrade._handle = Some(handle.abort_on_drop());
+        task
+    }
+
+    fn handle_cancel_upgrade(&mut self) -> Task<Message> {
+        self.upgrade.cancel("Upgrade");
+        Task::none()
+    }
+
+    fn handle_upgrade_progress(&mut self, event: install::InstallProgress) -> Task<Message> {
+        let queue = &self.upgrade_queue;
+        self.upgrade.handle_event(&event, |i| {
+            let name = queue.get(i).map(|p| p.name.as_str()).unwrap_or("...");
+            format!("Upgrading {name}")
+        });
+        Task::none()
+    }
+
+    // ── Selection ────────────────────────────────────────────────
+
+    fn handle_toggle_category(&mut self, cat: String) -> Task<Message> {
+        let cat_ids: Vec<String> = self
+            .catalog
+            .iter()
+            .filter(|p| p.category == cat)
+            .map(|p| p.id.clone())
+            .collect();
+        toggle_set(&mut self.selected, cat_ids);
+        Task::none()
+    }
+
+    fn handle_select_all(&mut self) -> Task<Message> {
+        let search_lower = self.search.to_lowercase();
+        match self.screen {
+            Screen::PackageSelect => {
+                let visible_ids: Vec<String> = self
+                    .catalog
+                    .iter()
+                    .filter(|p| {
+                        search_lower.is_empty()
+                            || p.name_lower.contains(&search_lower)
+                            || p.desc_lower.contains(&search_lower)
+                    })
+                    .map(|p| p.id.clone())
+                    .collect();
+                toggle_set(&mut self.selected, visible_ids);
+            }
+            Screen::UpdateSelect => {
+                let visible_ids: Vec<String> = self
+                    .update_scan
+                    .packages
+                    .iter()
+                    .filter(|p| {
+                        search_lower.is_empty()
+                            || p.name_lower.contains(&search_lower)
+                            || p.winget_id_lower.contains(&search_lower)
+                    })
+                    .map(|p| p.winget_id.clone())
+                    .collect();
+                toggle_set(&mut self.update_scan.selected, visible_ids);
+            }
+            _ => {}
+        }
+        Task::none()
+    }
+
+    // ── Export / import ──────────────────────────────────────────
+
+    fn handle_export_selection(&mut self) -> Task<Message> {
+        let selected = self.selected.clone();
+        Task::perform(
+            catalog::export_selection(selected),
+            Message::ExportCompleted,
+        )
+    }
+
+    fn handle_export_completed(&mut self, result: Result<(), String>) -> Task<Message> {
+        match result {
+            Ok(()) => {
+                self.selection_status = Some("Selection exported".into());
+            }
+            Err(msg) if msg.is_empty() => return Task::none(),
+            Err(msg) => {
+                self.selection_status = Some(format!("Export failed: {msg}"));
+            }
+        }
+        Task::perform(
+            async {
+                tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+            },
+            |_| Message::ClearSelectionStatus,
+        )
+    }
+
+    fn handle_import_selection(&mut self) -> Task<Message> {
+        let valid_ids: HashSet<String> = self.catalog.iter().map(|p| p.id.clone()).collect();
+        Task::perform(
+            catalog::import_selection(valid_ids),
+            Message::ImportCompleted,
+        )
+    }
+
+    fn handle_import_completed(
+        &mut self,
+        result: Result<HashSet<String>, String>,
+    ) -> Task<Message> {
+        match result {
+            Ok(ids) => {
+                let count = ids.len();
+                self.selected = ids;
+                self.selection_status = Some(format!("{count} packages imported"));
+            }
+            Err(msg) if msg.is_empty() => return Task::none(),
+            Err(msg) => {
+                self.selection_status = Some(format!("Import failed: {msg}"));
+            }
+        }
+        Task::perform(
+            async {
+                tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+            },
+            |_| Message::ClearSelectionStatus,
+        )
+    }
+
+    fn handle_copy_log(&mut self, lines: Vec<String>) -> Task<Message> {
+        let state = match self.screen {
+            Screen::Updating => &self.upgrade,
+            _ => &self.install,
+        };
+        let (done, failed, cancelled) = state.status_counts();
+        let mut header = format!("{done} succeeded, {failed} failed");
+        if cancelled > 0 {
+            header.push_str(&format!(", {cancelled} cancelled"));
+        }
+        let text = format!("{header}\n\n{}", lines.join("\n"));
+
+        match self.screen {
+            Screen::Updating => self.upgrade.copy_status = true,
+            _ => self.install.copy_status = true,
+        }
+
+        Task::batch([
+            clipboard::write(text),
+            Task::perform(
+                async {
+                    tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+                },
+                |_| Message::ClearCopyStatus,
+            ),
+        ])
+    }
+
+    // ── Keyboard shortcuts ───────────────────────────────────────
+
+    fn handle_key_confirm(&mut self) -> Task<Message> {
+        match self.screen {
+            Screen::PackageSelect if !self.selected.is_empty() => {
+                self.screen = Screen::Review;
+                Task::none()
+            }
+            Screen::Review => self.handle_start_install(),
+            Screen::Installing if self.install.done => self.handle_finish_and_reset(),
+            Screen::UpdateScanning if self.update_scan.done => self.handle_go_back(),
+            Screen::UpdateSelect if !self.update_scan.selected.is_empty() => {
+                self.handle_start_upgrade()
+            }
+            Screen::Updating if self.upgrade.done => self.handle_finish_update_and_reset(),
+            _ => Task::none(),
+        }
+    }
+
+    fn handle_key_escape(&mut self) -> Task<Message> {
+        match self.screen {
+            Screen::PackageSelect | Screen::Review | Screen::UpdateSelect | Screen::Settings => {
+                self.handle_go_back()
+            }
+            Screen::Installing if !self.install.done => self.handle_cancel_install(),
+            Screen::UpdateScanning if !self.update_scan.done => self.handle_cancel_update_scan(),
+            Screen::Updating if !self.upgrade.done => self.handle_cancel_upgrade(),
+            _ => Task::none(),
+        }
     }
 
     fn view(&self) -> Element<'_, Message> {

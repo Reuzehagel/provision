@@ -30,7 +30,7 @@ If `cargo build` fails with "Access is denied", the binary is still running — 
 
 Iced (0.14) Elm-style architecture: **State → Message → Update → View**.
 
-- **`src/main.rs`** — `App` struct, `Message` enum, `Screen` enum, `ProgressState`, `UpdateScanState`, `update()` logic, `view()` dispatch, `subscription()` for keyboard shortcuts. Helper method `is_installed()` for checking install state. No view or style code.
+- **`src/main.rs`** — `App` struct, `Message` enum, `Screen` enum, `ProgressState`, `UpdateScanState`, thin `update()` dispatcher + `handle_*()` domain methods (navigation, install, upgrade, selection, export/import, keyboard), `view()` dispatch, `subscription()` for keyboard shortcuts. Helper method `is_installed()` for checking install state. Free functions: `toggle_set()` for bulk select/deselect. No view or style code.
 - **`src/views.rs`** — All `view_*` methods (as `impl App`), standalone helpers `terminal_log_box()`, `view_progress_screen()`, `profile_card()`, `package_row()`, `ProgressLabels`.
 - **`src/styles.rs`** — Color constants (zinc palette: `TEXT`, `MUTED`, `MUTED_FG`, `CARD_BG`, `BORDER`, `STATUS_*`), `LUCIDE_FONT` constant, button/card/checkbox/container style functions.
 - **`src/install.rs`** — Install engine. `PackageStatus`/`InstallProgress` enums, `install_all()` returns a stream via `iced::stream::channel`. Reads raw bytes from process stdout with mini terminal emulator (handles `\r`, `\n`, ANSI escapes). Classifies output as `Log` (meaningful) vs `Activity` (transient spinners/progress).
@@ -47,6 +47,7 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 ## Conventions
 
 ### Iced API
+
 - **Iced 0.14 API** — uses `iced::application(new, update, view)` builder where `new` returns `(Self, Task<Message>)` and `update` returns `Task<Message>`. NOT the older `Sandbox` trait.
 - Use `Element<'_, Message>` (explicit elided lifetime) in view methods to avoid `mismatched_lifetime_syntaxes` warnings
 - **Rust 2024 edition** — requires Rust 1.85+
@@ -58,6 +59,7 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 - **Subscriptions**: Wire up with `.subscription(App::subscription)` on the application builder. The `subscription()` closure is `'static` — cannot capture `&self`, so route by screen in `update()` instead.
 
 ### Layout & Widgets
+
 - Center content in a screen: `container(content).center_x(Length::Fill).center_y(Length::Fill)`
 - Iced `Padding` does NOT support `[_; 4]` arrays — use `padding::left(n)`, `padding::top(n)`, etc. for directional padding
 - `checkbox(bool)` builder pattern — use `.label()` and `.on_toggle()`, no positional label arg
@@ -72,6 +74,7 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 - **`Theme::custom(name, palette)`** — don't call `.into()` on the name string, it causes ambiguous type inference. Pass `&str` directly. Palette requires all fields including `warning`.
 
 ### Styling
+
 - Dark theme by default; card/button styles use explicit RGB values for contrast control (don't rely on palette values for card backgrounds — they blend with text on hover)
 - `button::Style::text_color` overrides `.color()` on child text widgets — set description contrast via background color choices, not text color overrides
 - `button::Style` requires `snap: false` field in struct literals
@@ -81,14 +84,18 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 - **Icons**: Lucide icons via `lucide-icons` crate. Use `text(char::from(Icon::ChevronLeft)).font(LUCIDE_FONT)` with the type-safe `lucide_icons::Icon` enum — never hardcode codepoints. `LUCIDE_FONT` constant is in `styles.rs`. Load font bytes via `.font(lucide_icons::LUCIDE_FONT_BYTES)` on the application builder. Emoji chars do NOT render in Iced — always use an icon font.
 
 ### Data & Serde
+
 - Serde structs: derive `Deserialize` directly on runtime types (no separate DTO layer) — see `Package` in `catalog.rs`
+- **Precomputed lowercase fields**: `Package` and `UpgradeablePackage` have `#[serde(skip)]` fields (`name_lower`, `desc_lower`, `winget_id_lower`) populated after deserialization. Use these in search filters and `is_installed()` instead of calling `.to_lowercase()` per-frame. When adding new searchable structs, follow the same pattern.
 
 ### Process & IO
+
 - **Spawning processes on Windows**: Use `tokio::process::Command` with `.creation_flags(0x08000000)` (`CREATE_NO_WINDOW`) to prevent console windows flashing. Use `.stderr(Stdio::null())` unless you consume stderr — piped-but-unread stderr deadlocks when the buffer fills.
 - **UTF-8 safe slicing**: When slicing strings at byte offsets (e.g. parsing winget column-aligned tables), snap to char boundaries with `str::is_char_boundary()` — multi-byte chars like `…` cause panics
 - **Winget piped output**: Winget outputs spinner frames as individual `\r\n` lines when piped. Read raw bytes and classify transient vs meaningful output — don't use `lines()` reader
 
 ### Rust Patterns
+
 - **Dead code on enum fields**: Rust doesn't track enum field reads through pattern matching in other modules. Fields in message/progress enums consumed only via `..` or match arms in `main.rs` need `#[allow(dead_code)]` annotations in their defining module.
 - **Shared search state**: `self.search` is reused across screens (only one visible at a time). Clear it in the `update()` handler when transitioning to any screen that uses search (see `ProfileSelected`, `StartUpdateScan`, `FinishAndReset`).
 - **Background startup tasks**: Kick off non-blocking scans in `App::new()` by returning the `Task` from the constructor. Store the `task::Handle` (via `.abort_on_drop()`) to keep it alive. Handle results gracefully — if the scan fails, the app works without the data.

@@ -15,6 +15,15 @@ pub struct Package {
     pub profiles: Vec<String>,
     pub post_install: Option<String>,
     pub install_command: Option<String>,
+    /// Precomputed `name.to_lowercase()` for search filtering.
+    #[serde(skip)]
+    pub name_lower: String,
+    /// Precomputed `description.to_lowercase()` for search filtering.
+    #[serde(skip)]
+    pub desc_lower: String,
+    /// Precomputed `winget_id` lowercased, for installed-package lookups.
+    #[serde(skip)]
+    pub winget_id_lower: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -25,7 +34,13 @@ struct CatalogFile {
 pub fn load_catalog() -> Vec<Package> {
     let raw = include_str!("../packages.toml");
     let file: CatalogFile = toml::from_str(raw).expect("packages.toml should be valid");
-    file.packages
+    let mut packages = file.packages;
+    for pkg in &mut packages {
+        pkg.name_lower = pkg.name.to_lowercase();
+        pkg.desc_lower = pkg.description.to_lowercase();
+        pkg.winget_id_lower = pkg.winget_id.as_ref().map(|id| id.to_lowercase());
+    }
+    packages
 }
 
 /// Return the set of package IDs that should be pre-selected for a profile.

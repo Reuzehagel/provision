@@ -197,8 +197,8 @@ impl App {
                 .filter(|p| {
                     p.category == *cat
                         && (search_lower.is_empty()
-                            || p.name.to_lowercase().contains(&search_lower)
-                            || p.description.to_lowercase().contains(&search_lower))
+                            || p.name_lower.contains(&search_lower)
+                            || p.desc_lower.contains(&search_lower))
                 })
                 .collect();
 
@@ -595,8 +595,8 @@ impl App {
             .iter()
             .filter(|p| {
                 search_lower.is_empty()
-                    || p.name.to_lowercase().contains(&search_lower)
-                    || p.winget_id.to_lowercase().contains(&search_lower)
+                    || p.name_lower.contains(&search_lower)
+                    || p.winget_id_lower.contains(&search_lower)
             })
             .collect();
 

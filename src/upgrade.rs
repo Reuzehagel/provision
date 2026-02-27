@@ -34,6 +34,10 @@ pub struct UpgradeablePackage {
     pub available_version: String,
     #[allow(dead_code)]
     pub source: String,
+    /// Precomputed `name.to_lowercase()` for search filtering.
+    pub name_lower: String,
+    /// Precomputed `winget_id.to_lowercase()` for search filtering.
+    pub winget_id_lower: String,
 }
 
 #[derive(Debug, Clone)]
@@ -215,6 +219,8 @@ pub fn scan_upgrades(
                         current_version: "130.0".into(),
                         available_version: "131.0".into(),
                         source: "winget".into(),
+                        name_lower: "mozilla firefox".into(),
+                        winget_id_lower: "mozilla.firefox".into(),
                     },
                     UpgradeablePackage {
                         name: "Visual Studio Code".into(),
@@ -222,6 +228,8 @@ pub fn scan_upgrades(
                         current_version: "1.94.0".into(),
                         available_version: "1.95.0".into(),
                         source: "winget".into(),
+                        name_lower: "visual studio code".into(),
+                        winget_id_lower: "microsoft.visualstudiocode".into(),
                     },
                     UpgradeablePackage {
                         name: "Git".into(),
@@ -229,6 +237,8 @@ pub fn scan_upgrades(
                         current_version: "2.46.0".into(),
                         available_version: "2.47.0".into(),
                         source: "winget".into(),
+                        name_lower: "git".into(),
+                        winget_id_lower: "git.git".into(),
                     },
                 ];
 
@@ -348,12 +358,16 @@ pub fn parse_upgrade_table(lines: &[String]) -> Vec<UpgradeablePackage> {
             continue;
         }
 
+        let name_lower = name.to_lowercase();
+        let winget_id_lower = id.to_lowercase();
         packages.push(UpgradeablePackage {
             name,
             winget_id: id,
             current_version: version,
             available_version: available,
             source,
+            name_lower,
+            winget_id_lower,
         });
     }
 
