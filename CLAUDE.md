@@ -17,14 +17,36 @@ Windows provisioning GUI built with Rust and Iced. See `DESIGN.md` for design sy
 cargo build          # debug build
 cargo build --release
 cargo run            # launch the GUI in debug mode
+cargo run -- --dry   # dry-run mode (fake winget data, no real installs)
 cargo clippy         # lint
 cargo fmt --check    # check formatting
-cargo run -- --dry   # dry-run mode (fake winget data, no real installs)
+```
+
+**`just` shortcuts** (preferred):
+
+```bash
+just run             # cargo run
+just build           # debug build
+just release         # release build
+just check           # build + clippy + fmt --check (run after every code change)
+just fmt             # cargo fmt (auto-fix formatting)
+just sort-packages   # sort packages.toml by category (cargo run --bin sort_packages)
+just kill            # taskkill provision.exe (when "Access is denied" on build)
 ```
 
 No test suite yet. When tests exist, run with `cargo test`.
 
-If `cargo build` fails with "Access is denied", the binary is still running — kill with `taskkill //F //IM provision.exe`
+If `cargo build` fails with "Access is denied", the binary is still running — kill with `just kill` or `taskkill //F //IM provision.exe`
+
+## Releases
+
+GitHub Actions workflow (`.github/workflows/release.yml`) builds and publishes on version tags. To release:
+
+1. Bump `version` in `Cargo.toml`
+2. Commit and tag: `git tag v0.X.0`
+3. Push the tag: `git push origin v0.X.0`
+
+The workflow builds a release binary on `windows-latest`, renames it to `provision-vX.Y.Z.exe`, and creates a GitHub Release with auto-generated release notes.
 
 ## Architecture
 
@@ -35,11 +57,12 @@ Iced (0.14) Elm-style architecture: **State → Message → Update → View**.
 - **`src/styles.rs`** — Color constants (zinc palette: `TEXT`, `MUTED`, `MUTED_FG`, `CARD_BG`, `BORDER`, `STATUS_*`), `LUCIDE_FONT` constant, button/card/checkbox/container style functions.
 - **`src/install.rs`** — Install engine. `PackageStatus`/`InstallProgress` enums, `install_all()` returns a stream via `iced::stream::channel`. Reads raw bytes from process stdout with mini terminal emulator (handles `\r`, `\n`, ANSI escapes). Classifies output as `Log` (meaningful) vs `Activity` (transient spinners/progress).
 - **`src/upgrade.rs`** — Upgrade & installed-detection engine. `UpgradeablePackage`/`InstalledPackage` structs, `ScanProgress`/`InstalledScanProgress` enums, `scan_upgrades()`/`scan_installed()` stream winget output, `parse_upgrade_table()`/`parse_list_table()` parse column-aligned tables, `upgrade_all()` streams per-package upgrades.
-- **`src/catalog.rs`** — `Package` struct (derives `Deserialize`), `load_catalog()` (embeds `packages.toml` via `include_str!`), `default_selection()`, `category_display_name()`, `categories()`. Also `SelectionFile` serde struct and async `export_selection()`/`import_selection()` using `rfd::AsyncFileDialog` + `tokio::fs`.
+- **`src/catalog.rs`** — `Package` struct (derives `Deserialize`), `CatalogSource` enum (Embedded/Cached/Remote). `load_catalog()` embeds `packages.toml` via `include_str!`; `fetch_remote_catalog()` tries `%APPDATA%\provision` cache (24h TTL) then GitHub raw URL, falling back to embedded on failure. Also `default_selection()`, `category_display_name()`, `categories()`, `SelectionFile` serde struct, and async `export_selection()`/`import_selection()` using `rfd::AsyncFileDialog` + `tokio::fs`.
 - **`src/settings.rs`** — `WingetSettings` struct with session-only winget flag configuration. `InstallMode`, `InstallScope`, `Architecture` enums with Display impls for pick_list. `OptionalScope`/`OptionalArchitecture` newtypes showing "Default" for `None`. `install_args()` builds extra CLI flags for install/upgrade commands.
 - **`src/profile.rs`** — `Profile` enum (Laptop, Desktop, Manual) with metadata methods (`title`, `description`, `icon`, `slug`) and `Profile::ALL` constant.
 - **`src/theme.rs`** — Custom theme via `Theme::custom("provision", Palette { ... })` with Tailwind zinc neutrals and blue/emerald/red/amber accents.
-- **`packages.toml`** — 91-package catalog (10 categories) embedded in the binary at compile time. Each entry has `id`, `name`, `description`, `category`, `winget_id`, `profiles`, and optional `post_install`/`install_command`.
+- **`src/bin/sort_packages.rs`** — Utility binary (`just sort-packages`) that reads `packages.toml`, groups by category in a fixed display order, sorts alphabetically within each category, and rewrites the file.
+- **`packages.toml`** — 92-package catalog (10 categories) embedded in the binary at compile time. Each entry has `id`, `name`, `description`, `category`, `winget_id`, `profiles`, and optional `post_install`/`install_command`.
 - **`DESIGN.md`** — Design system reference (color tokens, spacing, component patterns).
 
 Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*` method on `App`.
