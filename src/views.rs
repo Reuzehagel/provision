@@ -131,11 +131,17 @@ impl App {
             status_indicator(Icon::Loader, "Scanning installed packages...".into(), MUTED)
         };
 
+        let version_label = text(format!("v{}", env!("CARGO_PKG_VERSION")))
+            .size(12)
+            .color(MUTED);
+
         let status_row = row![
             catalog_status,
             iced::widget::Space::new().width(Length::Fill),
+            version_label,
             scan_status,
         ]
+        .spacing(12)
         .align_y(iced::Alignment::Center);
 
         let content = column![
