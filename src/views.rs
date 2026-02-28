@@ -13,9 +13,10 @@ use lucide_icons::Icon;
 
 use crate::styles::{
     LUCIDE_FONT, MUTED, MUTED_FG, STATUS_AMBER, STATUS_BLUE, STATUS_GREEN, STATUS_RED,
-    TERMINAL_TEXT, TEXT, cancel_button_style, card_style, continue_button_style, divider_style,
-    ghost_button_style, icon_box_style, installed_badge_style, package_checkbox_style, tab_style,
-    terminal_box_style, update_card_style, warning_badge_style,
+    TERMINAL_TEXT, TEXT, browser_badge_style, cancel_button_style, card_style,
+    continue_button_style, divider_style, ghost_button_style, icon_box_style,
+    installed_badge_style, package_checkbox_style, tab_style, terminal_box_style,
+    update_card_style, warning_badge_style,
 };
 use crate::{App, Message, ProgressState};
 
@@ -366,10 +367,30 @@ impl App {
             let mut cat_col = column![cat_label].spacing(4);
 
             for pkg in cat_pkgs {
-                let method = match (&pkg.install_command, &pkg.winget_id) {
-                    (Some(cmd), _) => cmd.clone(),
-                    (_, Some(wid)) => wid.clone(),
-                    _ => "unknown".into(),
+                let is_browser = pkg.is_browser_download();
+
+                let method_widget: Element<'_, Message> = if is_browser {
+                    row![
+                        text(char::from(Icon::ExternalLink))
+                            .size(10)
+                            .font(LUCIDE_FONT)
+                            .color(STATUS_BLUE),
+                        text("opens browser").size(11).color(STATUS_BLUE),
+                    ]
+                    .spacing(4)
+                    .align_y(iced::Alignment::Center)
+                    .into()
+                } else {
+                    let method = match (&pkg.install_command, &pkg.winget_id) {
+                        (Some(cmd), _) => cmd.clone(),
+                        (_, Some(wid)) => wid.clone(),
+                        _ => "unknown".into(),
+                    };
+                    text(method)
+                        .size(11)
+                        .font(iced::Font::MONOSPACE)
+                        .color(MUTED)
+                        .into()
                 };
 
                 let name_text = text(&pkg.name).size(14);
@@ -386,10 +407,7 @@ impl App {
                 let pkg_row = row![
                     name_row,
                     iced::widget::Space::new().width(Length::Fill),
-                    text(method)
-                        .size(11)
-                        .font(iced::Font::MONOSPACE)
-                        .color(MUTED),
+                    method_widget,
                 ]
                 .spacing(8)
                 .align_y(iced::Alignment::Center)
@@ -438,10 +456,20 @@ impl App {
         .spacing(8)
         .align_y(iced::Alignment::Center);
 
-        let content = column![header, subtitle, scrollable_list, footer]
+        let mut content = column![header, subtitle, scrollable_list]
             .spacing(14)
             .width(Length::Fill)
             .height(Length::Fill);
+
+        if queue.iter().any(|p| p.id == "wsl") {
+            content = content.push(status_indicator(
+                Icon::TriangleAlert,
+                "WSL installation may require a system restart to take effect.".into(),
+                STATUS_AMBER,
+            ));
+        }
+
+        let content = content.push(footer);
 
         container(content)
             .width(Length::Fill)
@@ -1100,20 +1128,33 @@ fn package_row<'a>(pkg: &'a Package, app: &'a App) -> Element<'a, Message> {
         .text_size(14)
         .style(package_checkbox_style);
 
-    let pkg_row_content: Element<'_, Message> = if installed {
+    let is_browser = pkg.is_browser_download();
+
+    let mut pkg_row = row![cb].spacing(8).align_y(iced::Alignment::Center);
+    if installed {
         let badge_label = text("Installed").size(10).color(STATUS_GREEN);
         let badge = container(badge_label)
             .style(installed_badge_style)
             .padding([1, 6]);
-        row![cb, badge]
-            .spacing(8)
-            .align_y(iced::Alignment::Center)
-            .into()
-    } else {
-        cb.into()
-    };
+        pkg_row = pkg_row.push(badge);
+    }
+    if is_browser {
+        let badge_content = row![
+            text(char::from(Icon::ExternalLink))
+                .size(9)
+                .font(LUCIDE_FONT)
+                .color(STATUS_BLUE),
+            text("Opens browser").size(10).color(STATUS_BLUE),
+        ]
+        .spacing(3)
+        .align_y(iced::Alignment::Center);
+        let badge = container(badge_content)
+            .style(browser_badge_style)
+            .padding([1, 6]);
+        pkg_row = pkg_row.push(badge);
+    }
 
-    container(pkg_row_content).padding([4, 0]).into()
+    container(pkg_row).padding([4, 0]).into()
 }
 
 /// Small icon + label row used for status indicators (e.g. catalog source, scan progress).

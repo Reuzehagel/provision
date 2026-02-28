@@ -46,6 +46,15 @@ pub struct Package {
     pub winget_id_lower: Option<String>,
 }
 
+impl Package {
+    /// True if this package opens a browser URL instead of silently installing.
+    pub fn is_browser_download(&self) -> bool {
+        self.install_command
+            .as_deref()
+            .is_some_and(|c| c.starts_with("start http"))
+    }
+}
+
 #[derive(Deserialize)]
 struct CatalogFile {
     packages: Vec<Package>,

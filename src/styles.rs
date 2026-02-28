@@ -252,20 +252,11 @@ pub fn terminal_box_style(_theme: &Theme) -> container::Style {
     }
 }
 
-pub fn installed_badge_style(_theme: &Theme) -> container::Style {
+fn badge_base(bg: Color, border_color: Color) -> container::Style {
     container::Style {
-        background: Some(iced::Background::Color(Color::from_rgb(
-            0x06 as f32 / 255.0,
-            0x5f as f32 / 255.0,
-            0x46 as f32 / 255.0,
-        ))),
+        background: Some(iced::Background::Color(bg)),
         border: Border {
-            color: Color::from_rgba(
-                0x10 as f32 / 255.0,
-                0xb9 as f32 / 255.0,
-                0x81 as f32 / 255.0,
-                0.3,
-            ),
+            color: border_color,
             width: 1.0,
             radius: 4.0.into(),
         },
@@ -273,26 +264,54 @@ pub fn installed_badge_style(_theme: &Theme) -> container::Style {
     }
 }
 
+pub fn installed_badge_style(_theme: &Theme) -> container::Style {
+    badge_base(
+        Color::from_rgb(
+            0x06 as f32 / 255.0,
+            0x5f as f32 / 255.0,
+            0x46 as f32 / 255.0,
+        ),
+        Color::from_rgba(
+            0x10 as f32 / 255.0,
+            0xb9 as f32 / 255.0,
+            0x81 as f32 / 255.0,
+            0.3,
+        ),
+    )
+}
+
 pub fn warning_badge_style(_theme: &Theme) -> container::Style {
-    container::Style {
-        background: Some(iced::Background::Color(Color::from_rgba(
+    badge_base(
+        Color::from_rgba(
             0xf5 as f32 / 255.0,
             0x9e as f32 / 255.0,
             0x0b as f32 / 255.0,
             0.15,
-        ))),
-        border: Border {
-            color: Color::from_rgba(
-                0xf5 as f32 / 255.0,
-                0x9e as f32 / 255.0,
-                0x0b as f32 / 255.0,
-                0.3,
-            ),
-            width: 1.0,
-            radius: 4.0.into(),
-        },
-        ..Default::default()
-    }
+        ),
+        Color::from_rgba(
+            0xf5 as f32 / 255.0,
+            0x9e as f32 / 255.0,
+            0x0b as f32 / 255.0,
+            0.3,
+        ),
+    )
+}
+
+pub fn browser_badge_style(_theme: &Theme) -> container::Style {
+    badge_base(
+        Color::from_rgba(
+            0x1e as f32 / 255.0,
+            0x40 as f32 / 255.0,
+            0xaf as f32 / 255.0,
+            0.3,
+        ),
+        Color::from_rgba(
+            0x33 as f32 / 255.0,
+            0x8f as f32 / 255.0,
+            0xf3 as f32 / 255.0,
+            0.3,
+        ),
+    )
 }
 
 pub fn icon_box_style(_theme: &Theme) -> container::Style {
