@@ -79,7 +79,7 @@ fn main() -> iced::Result {
         .subscription(App::subscription)
         .title("Provision")
         .theme(App::theme)
-        .window_size(Size::new(900.0, 600.0))
+        .window_size(Size::new(900.0, 605.0))
         .font(lucide_icons::LUCIDE_FONT_BYTES)
         .run()
 }

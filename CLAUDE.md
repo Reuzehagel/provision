@@ -58,7 +58,7 @@ Iced (0.14) Elm-style architecture: **State → Message → Update → View**.
 - **`src/install.rs`** — Install engine. `PackageStatus`/`InstallProgress` enums, `install_all()` returns a stream via `iced::stream::channel`. Reads raw bytes from process stdout with mini terminal emulator (handles `\r`, `\n`, ANSI escapes). Classifies output as `Log` (meaningful) vs `Activity` (transient spinners/progress).
 - **`src/upgrade.rs`** — Upgrade & installed-detection engine. `UpgradeablePackage`/`InstalledPackage` structs, `ScanProgress`/`InstalledScanProgress` enums, `scan_upgrades()`/`scan_installed()` stream winget output, `parse_upgrade_table()`/`parse_list_table()` parse column-aligned tables, `upgrade_all()` streams per-package upgrades.
 - **`src/catalog.rs`** — `Package` struct (derives `Deserialize`), `CatalogSource` enum (Embedded/Cached/Remote). `load_catalog()` embeds `packages.toml` via `include_str!`; `fetch_remote_catalog()` tries `%APPDATA%\provision` cache (24h TTL) then GitHub raw URL, falling back to embedded on failure. Also `default_selection()`, `category_display_name()`, `categories()`, `SelectionFile` serde struct, and async `export_selection()`/`import_selection()` using `rfd::AsyncFileDialog` + `tokio::fs`.
-- **`src/settings.rs`** — `WingetSettings` struct with session-only winget flag configuration. `InstallMode`, `InstallScope`, `Architecture` enums with Display impls for pick_list. `OptionalScope`/`OptionalArchitecture` newtypes showing "Default" for `None`. `install_args()` builds extra CLI flags for install/upgrade commands.
+- **`src/settings.rs`** — `WingetSettings` struct (persisted to `%APPDATA%\provision\settings.toml` via `load_settings()`/`save_settings()`). `SettingsTab` enum (`Winget`, `Changelog`). `InstallMode`, `InstallScope`, `Architecture` enums with Display impls for pick_list. `OptionalScope`/`OptionalArchitecture` newtypes showing "Default" for `None`. `install_args()` builds extra CLI flags for install/upgrade commands.
 - **`src/profile.rs`** — `Profile` enum (Laptop, Desktop, Manual) with metadata methods (`title`, `description`, `icon`, `slug`) and `Profile::ALL` constant.
 - **`src/theme.rs`** — Custom theme via `Theme::custom("provision", Palette { ... })` with Tailwind zinc neutrals and blue/emerald/red/amber accents.
 - **`src/bin/sort_packages.rs`** — Utility binary (`just sort-packages`) that reads `packages.toml`, groups by category in a fixed display order, sorts alphabetically within each category, and rewrites the file.
@@ -127,7 +127,4 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 
 ## Roadmap
 
-### Later releases
-
-- **Custom/user packages** — Let users add arbitrary winget IDs not in the catalog. Persist to a local config file (`%APPDATA%\provision\custom-packages.toml`)
-- **Config file for preferences** — `%APPDATA%\provision\config.toml` for last-used profile, winget flags, window position, custom packages
+See `TODO.md` for the full roadmap and task list.
