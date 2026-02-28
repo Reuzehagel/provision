@@ -6,10 +6,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Windows provisioning GUI built with Rust and Iced. See `DESIGN.md` for design system tokens and visual spec.
 
+## Prerequisites
+
+- **Rust 1.85+** (edition 2024)
+- **winget** (Windows Package Manager) — required at runtime for installs/upgrades
+- **just** (command runner) — `cargo install just` or `winget install Casey.Just`
+
 ## Workflow
 
 - **After making any code changes, always run `just check`** — runs `cargo build`, `clippy`, and `fmt --check` in sequence
-- **After completing a roadmap feature, update the Roadmap section** — remove the finished item (or move it to a "Done" section if context is useful to keep)
+- **Use `cargo run -- --dry` during development** — fake winget data, no real installs. Lets you test UI without winget
+- **After completing a roadmap feature, update `TODO.md`** — remove the finished item or mark it done
 
 ## Build & Run
 
@@ -62,7 +69,7 @@ Iced (0.14) Elm-style architecture: **State → Message → Update → View**.
 - **`src/profile.rs`** — `Profile` enum (Laptop, Desktop, Manual) with metadata methods (`title`, `description`, `icon`, `slug`) and `Profile::ALL` constant.
 - **`src/theme.rs`** — Custom theme via `Theme::custom("provision", Palette { ... })` with Tailwind zinc neutrals and blue/emerald/red/amber accents.
 - **`src/bin/sort_packages.rs`** — Utility binary (`just sort-packages`) that reads `packages.toml`, groups by category in a fixed display order, sorts alphabetically within each category, and rewrites the file.
-- **`packages.toml`** — 92-package catalog (10 categories) embedded in the binary at compile time. Each entry has `id`, `name`, `description`, `category`, `winget_id`, `profiles`, and optional `post_install`/`install_command`.
+- **`packages.toml`** — Package catalog embedded in the binary at compile time. Each entry has `id`, `name`, `description`, `category`, `winget_id`, `profiles`, and optional `post_install`/`install_command`.
 - **`DESIGN.md`** — Design system reference (color tokens, spacing, component patterns).
 
 Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*` method on `App`.
