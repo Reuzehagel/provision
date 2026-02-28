@@ -7,14 +7,14 @@ use iced::{Element, Length, Theme, padding};
 use crate::catalog::{self, CatalogSource, Package};
 use crate::install::PackageStatus;
 use crate::profile::Profile;
-use crate::settings::{InstallMode, OptionalArchitecture, OptionalScope};
+use crate::settings::{InstallMode, OptionalArchitecture, OptionalScope, SettingsTab};
 use crate::upgrade::UpgradeablePackage;
 use lucide_icons::Icon;
 
 use crate::styles::{
     LUCIDE_FONT, MUTED, MUTED_FG, STATUS_AMBER, STATUS_BLUE, STATUS_GREEN, STATUS_RED,
-    TERMINAL_TEXT, cancel_button_style, card_style, continue_button_style, divider_style,
-    ghost_button_style, icon_box_style, installed_badge_style, package_checkbox_style,
+    TERMINAL_TEXT, TEXT, cancel_button_style, card_style, continue_button_style, divider_style,
+    ghost_button_style, icon_box_style, installed_badge_style, package_checkbox_style, tab_style,
     terminal_box_style, update_card_style, warning_badge_style,
 };
 use crate::{App, Message, ProgressState};
@@ -87,7 +87,7 @@ impl App {
             .size(15)
             .font(LUCIDE_FONT)
             .color(MUTED);
-        let settings_text = text("Winget settings").size(14).color(MUTED_FG);
+        let settings_text = text("Settings").size(14).color(MUTED_FG);
         let settings_chevron = text(char::from(Icon::ChevronRight))
             .size(14)
             .font(LUCIDE_FONT)
@@ -633,9 +633,33 @@ impl App {
     }
 
     pub(crate) fn view_settings(&self) -> Element<'_, Message> {
-        let s = &self.settings;
+        let header = back_header("Settings");
 
-        let header = back_header("Winget Settings");
+        let tab_bar = row![
+            tab_button("Winget", SettingsTab::Winget, self.settings_tab),
+            tab_button("Changelog", SettingsTab::Changelog, self.settings_tab),
+        ]
+        .spacing(4);
+
+        let tab_content: Element<'_, Message> = match self.settings_tab {
+            SettingsTab::Winget => self.view_settings_winget(),
+            SettingsTab::Changelog => view_settings_changelog(),
+        };
+
+        let content = column![header, tab_bar, tab_content]
+            .spacing(14)
+            .width(Length::Fill)
+            .height(Length::Fill);
+
+        container(content)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .padding(28)
+            .into()
+    }
+
+    fn view_settings_winget(&self) -> Element<'_, Message> {
+        let s = &self.settings;
 
         let subtitle = text("Settings apply to this session only")
             .size(13)
@@ -726,6 +750,7 @@ impl App {
         );
 
         let settings_list = column![
+            subtitle,
             section_behavior,
             mode_row,
             scope_row,
@@ -738,21 +763,12 @@ impl App {
             hash_row,
         ]
         .spacing(12)
+        .padding(padding::right(12))
         .width(Length::Fill);
 
-        let scrollable_settings = scrollable(settings_list)
+        scrollable(settings_list)
             .height(Length::Fill)
-            .width(Length::Fill);
-
-        let content = column![header, subtitle, scrollable_settings]
-            .spacing(14)
             .width(Length::Fill)
-            .height(Length::Fill);
-
-        container(content)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .padding(28)
             .into()
     }
 }
@@ -1112,6 +1128,75 @@ fn status_indicator(icon: Icon, label: String, color: iced::Color) -> Element<'s
     .spacing(4)
     .align_y(iced::Alignment::Center)
     .into()
+}
+
+/// A tab button for the settings screen.
+fn tab_button<'a>(
+    label: &'a str,
+    tab: SettingsTab,
+    active_tab: SettingsTab,
+) -> Element<'a, Message> {
+    let active = tab == active_tab;
+    button(text(label).size(13))
+        .on_press(Message::SetSettingsTab(tab))
+        .style(move |theme: &Theme, status| tab_style(theme, status, active))
+        .padding([6, 16])
+        .into()
+}
+
+const CHANGELOG_RAW: &str = include_str!("../CHANGELOG.md");
+
+enum ChangelogLine {
+    Version(String),
+    Section(String),
+    Item(String),
+}
+
+fn parse_changelog(raw: &str) -> Vec<ChangelogLine> {
+    raw.lines()
+        .filter_map(|line| {
+            line.strip_prefix("## ")
+                .map(|r| ChangelogLine::Version(r.to_string()))
+                .or_else(|| {
+                    line.strip_prefix("### ")
+                        .map(|r| ChangelogLine::Section(r.to_string()))
+                })
+                .or_else(|| {
+                    line.strip_prefix("- ")
+                        .map(|r| ChangelogLine::Item(r.to_string()))
+                })
+        })
+        .collect()
+}
+
+fn view_settings_changelog<'a>() -> Element<'a, Message> {
+    let lines = parse_changelog(CHANGELOG_RAW);
+    let mut col = column![].spacing(4).width(Length::Fill);
+
+    for line in lines {
+        match line {
+            ChangelogLine::Version(v) => {
+                col = col.push(container(text(v).size(16).color(TEXT)).padding(padding::top(8)));
+            }
+            ChangelogLine::Section(s) => {
+                col = col.push(
+                    container(text(s.to_uppercase()).size(11).color(MUTED_FG))
+                        .padding(padding::top(8)),
+                );
+            }
+            ChangelogLine::Item(item) => {
+                col = col.push(
+                    container(text(format!("\u{2022}  {item}")).size(13).color(MUTED_FG))
+                        .padding(padding::left(8)),
+                );
+            }
+        }
+    }
+
+    scrollable(col)
+        .height(Length::Fill)
+        .width(Length::Fill)
+        .into()
 }
 
 fn profile_card(profile: Profile, selected: Option<Profile>) -> Element<'static, Message> {

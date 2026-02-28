@@ -210,6 +210,7 @@ pub(crate) struct App {
     pub(crate) selected: HashSet<String>,
     pub(crate) search: String,
     pub(crate) settings: settings::WingetSettings,
+    pub(crate) settings_tab: settings::SettingsTab,
     // Install state
     pub(crate) install_queue: Vec<Package>,
     pub(crate) install: ProgressState,
@@ -248,6 +249,7 @@ impl App {
                 selected: HashSet::new(),
                 search: String::new(),
                 settings: settings::WingetSettings::default(),
+                settings_tab: settings::SettingsTab::default(),
                 install_queue: Vec::new(),
                 install: ProgressState::default(),
                 installed: HashMap::new(),
@@ -306,6 +308,7 @@ pub(crate) enum Message {
     CopyLog(Vec<String>),
     ClearCopyStatus,
     OpenSettings,
+    SetSettingsTab(settings::SettingsTab),
     SetInstallMode(settings::InstallMode),
     SetScope(settings::OptionalScope),
     SetArchitecture(settings::OptionalArchitecture),
@@ -390,7 +393,12 @@ impl App {
                 Task::none()
             }
             Message::OpenSettings => {
+                self.settings_tab = settings::SettingsTab::default();
                 self.screen = Screen::Settings;
+                Task::none()
+            }
+            Message::SetSettingsTab(tab) => {
+                self.settings_tab = tab;
                 Task::none()
             }
             Message::ClearSelectionStatus => {

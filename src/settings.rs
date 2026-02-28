@@ -1,5 +1,14 @@
 use std::fmt;
 
+// ── Settings tab ─────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SettingsTab {
+    #[default]
+    Winget,
+    Changelog,
+}
+
 // ── Install mode ─────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

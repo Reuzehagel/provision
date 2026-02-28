@@ -160,6 +160,31 @@ pub fn ghost_button_style(_theme: &Theme, status: button::Status) -> button::Sty
     }
 }
 
+pub fn tab_style(_theme: &Theme, status: button::Status, active: bool) -> button::Style {
+    let (bg, text_color, border_color) = if active {
+        (CARD_BG, TEXT, BORDER_FOCUS)
+    } else {
+        match status {
+            button::Status::Hovered | button::Status::Pressed => {
+                (CARD_BG, MUTED_FG, Color::TRANSPARENT)
+            }
+            _ => (Color::TRANSPARENT, MUTED, Color::TRANSPARENT),
+        }
+    };
+
+    button::Style {
+        background: Some(iced::Background::Color(bg)),
+        text_color,
+        border: Border {
+            color: border_color,
+            width: if active { 1.0 } else { 0.0 },
+            radius: 6.0.into(),
+        },
+        shadow: Shadow::default(),
+        snap: false,
+    }
+}
+
 // ── Card styles ───────────────────────────────────────────────────
 
 pub fn card_style(_theme: &Theme, status: button::Status, selected: bool) -> button::Style {
