@@ -70,16 +70,23 @@ fn ensure_elevated() {
 #[cfg(debug_assertions)]
 fn ensure_elevated() {}
 
+const ICON_RGBA: &[u8] = include_bytes!("../assets/icon.rgba");
+
 fn main() -> iced::Result {
     ensure_elevated();
 
     let dry_run = std::env::args().any(|a| a == "--dry");
+    let icon = iced::window::icon::from_rgba(ICON_RGBA.to_vec(), 128, 128).ok();
 
     iced::application(move || App::new(dry_run), App::update, App::view)
         .subscription(App::subscription)
         .title("Provision")
         .theme(App::theme)
         .window_size(Size::new(900.0, 605.0))
+        .window(iced::window::Settings {
+            icon,
+            ..Default::default()
+        })
         .font(lucide_icons::LUCIDE_FONT_BYTES)
         .run()
 }

@@ -8,6 +8,12 @@ You reinstall Windows, or get a new machine. Normally you spend the next hour op
 
 Provision fixes that. Tell it what kind of machine this is — laptop or desktop — and it pre-selects a sensible set of packages. Tweak the list, hit go, walk away. It handles winget installs, WSL setup, and post-install steps.
 
+## Screenshots
+
+![Profile selection](assets/sreenshots/main-screen.jpg)
+![Package picker](assets/sreenshots/manual-picker.jpg)
+![Installing](assets/sreenshots/install-screen.jpg)
+
 ## Install
 
 Download the latest release from the [Releases](../../releases) page and run the executable. No installer needed.

@@ -19,3 +19,6 @@ toml = "1"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_UI_Shell", "Win32_Foundation"] }
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
