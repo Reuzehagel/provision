@@ -125,8 +125,8 @@ fn parse_catalog_toml(raw: &str) -> Result<Vec<Package>, String> {
     Ok(packages)
 }
 
-/// Resolve the cache directory: `%APPDATA%\provision`
-fn dirs_cache_dir() -> Result<PathBuf, String> {
+/// Resolve the app data directory: `%APPDATA%\provision`
+pub(crate) fn dirs_cache_dir() -> Result<PathBuf, String> {
     let appdata = std::env::var("APPDATA").map_err(|_| "APPDATA not set".to_string())?;
     Ok(PathBuf::from(appdata).join("provision"))
 }

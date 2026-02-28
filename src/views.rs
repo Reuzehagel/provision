@@ -661,7 +661,7 @@ impl App {
     fn view_settings_winget(&self) -> Element<'_, Message> {
         let s = &self.settings;
 
-        let subtitle = text("Settings apply to this session only")
+        let subtitle = text("Settings are saved automatically")
             .size(13)
             .color(MUTED);
 
@@ -763,7 +763,7 @@ impl App {
             hash_row,
         ]
         .spacing(12)
-        .padding(padding::right(12))
+        .padding(padding::right(20))
         .width(Length::Fill);
 
         scrollable(settings_list)

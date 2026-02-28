@@ -1,4 +1,7 @@
 use std::fmt;
+use std::path::PathBuf;
+
+use serde::{Deserialize, Serialize};
 
 // ── Settings tab ─────────────────────────────────────────────────
 
@@ -11,7 +14,8 @@ pub enum SettingsTab {
 
 // ── Install mode ─────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum InstallMode {
     Silent,
     Interactive,
@@ -32,7 +36,8 @@ impl fmt::Display for InstallMode {
 
 // ── Install scope ────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum InstallScope {
     User,
     Machine,
@@ -70,10 +75,13 @@ impl fmt::Display for OptionalScope {
 
 // ── Architecture ─────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Architecture {
+    #[serde(rename = "x86")]
     X86,
+    #[serde(rename = "x64")]
     X64,
+    #[serde(rename = "arm64")]
     Arm64,
 }
 
@@ -111,6 +119,7 @@ impl fmt::Display for OptionalArchitecture {
 
 // ── Winget settings ──────────────────────────────────────────────
 
+#[derive(Serialize, Deserialize)]
 pub struct WingetSettings {
     pub install_mode: InstallMode,
     pub scope: Option<InstallScope>,
@@ -176,4 +185,39 @@ impl WingetSettings {
 
         args
     }
+}
+
+// ── Persistence ─────────────────────────────────────────────────
+
+fn settings_path() -> Option<PathBuf> {
+    crate::catalog::dirs_cache_dir()
+        .ok()
+        .map(|d| d.join("settings.toml"))
+}
+
+/// Load settings from disk. Returns `Default` on any failure.
+pub fn load_settings() -> WingetSettings {
+    let Some(path) = settings_path() else {
+        return WingetSettings::default();
+    };
+    let Ok(raw) = std::fs::read_to_string(&path) else {
+        return WingetSettings::default();
+    };
+    toml::from_str(&raw).unwrap_or_default()
+}
+
+/// Serialize settings to a TOML string for async persistence.
+pub fn serialize_settings(settings: &WingetSettings) -> Option<String> {
+    toml::to_string_pretty(settings).ok()
+}
+
+/// Write a pre-serialized settings string to disk (best-effort).
+pub async fn save_settings(content: String) {
+    let Some(path) = settings_path() else {
+        return;
+    };
+    if let Some(parent) = path.parent() {
+        let _ = tokio::fs::create_dir_all(parent).await;
+    }
+    let _ = tokio::fs::write(&path, content).await;
 }

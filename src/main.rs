@@ -248,7 +248,7 @@ impl App {
                 catalog_source: CatalogSource::Embedded,
                 selected: HashSet::new(),
                 search: String::new(),
-                settings: settings::WingetSettings::default(),
+                settings: settings::load_settings(),
                 settings_tab: settings::SettingsTab::default(),
                 install_queue: Vec::new(),
                 install: ProgressState::default(),
@@ -321,6 +321,8 @@ pub(crate) enum Message {
     KeyEscape,
     SelectAll,
     KeyIgnored,
+    #[allow(dead_code)]
+    Noop(()),
 }
 
 /// Fire a message after a 4-second delay (used for clearing transient UI feedback).
@@ -412,38 +414,46 @@ impl App {
             }
             Message::SetInstallMode(mode) => {
                 self.settings.install_mode = mode;
-                Task::none()
+                self.save_settings()
             }
             Message::SetScope(opt) => {
                 self.settings.scope = opt.0;
-                Task::none()
+                self.save_settings()
             }
             Message::SetArchitecture(opt) => {
                 self.settings.architecture = opt.0;
-                Task::none()
+                self.save_settings()
             }
             Message::ToggleForce(v) => {
                 self.settings.force = v;
-                Task::none()
+                self.save_settings()
             }
             Message::ToggleIncludeUnknown(v) => {
                 self.settings.include_unknown = v;
-                Task::none()
+                self.save_settings()
             }
             Message::ToggleIgnoreSecurityHash(v) => {
                 self.settings.ignore_security_hash = v;
-                Task::none()
+                self.save_settings()
             }
             Message::ToggleDisableInteractivity(v) => {
                 self.settings.disable_interactivity = v;
-                Task::none()
+                self.save_settings()
             }
             Message::SetInstallLocation(v) => {
                 self.settings.install_location = v;
                 Task::none()
             }
-            Message::KeyIgnored => Task::none(),
+            Message::KeyIgnored | Message::Noop(()) => Task::none(),
         }
+    }
+
+    /// Serialize current settings and fire an async write (best-effort).
+    fn save_settings(&self) -> Task<Message> {
+        let Some(content) = settings::serialize_settings(&self.settings) else {
+            return Task::none();
+        };
+        Task::perform(settings::save_settings(content), Message::Noop)
     }
 
     // ── Navigation & lifecycle ───────────────────────────────────
@@ -507,7 +517,11 @@ impl App {
                 self.update_scan._handle = None;
                 self.screen = Screen::ProfileSelect;
             }
-            Screen::UpdateSelect | Screen::Settings => {
+            Screen::Settings => {
+                self.screen = Screen::ProfileSelect;
+                return self.save_settings();
+            }
+            Screen::UpdateSelect => {
                 self.screen = Screen::ProfileSelect;
             }
             _ => {
