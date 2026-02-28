@@ -16,7 +16,6 @@ Windows provisioning GUI built with Rust and Iced. See `DESIGN.md` for design sy
 
 - **After making any code changes, always run `just check`** — runs `cargo build`, `clippy`, and `fmt --check` in sequence
 - **Use `cargo run -- --dry` during development** — fake winget data, no real installs. Lets you test UI without winget
-- **After completing a roadmap feature, update `TODO.md`** — remove the finished item or mark it done
 
 ## Build & Run
 
@@ -132,6 +131,3 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 - **Standalone view helpers returning `Element`**: When a free function takes multiple `&str` params and returns `Element<'_, Message>`, Rust can't infer which borrow — use explicit `<'a>` lifetime on all params and the return type.
 - **Threading config into streams**: Stream closures are `'static` — pass owned data (e.g. `Vec<String>` from `settings.install_args()`) into the closure. Use `.iter().cloned()` to extend args vecs inside the stream.
 
-## Roadmap
-
-See `TODO.md` for the full roadmap and task list.
