@@ -358,7 +358,10 @@ impl App {
         let subtitle = text(subtitle_text).size(13).color(MUTED);
 
         let categories = catalog::categories(&self.catalog);
-        let mut pkg_list = column![].spacing(14).width(Length::Fill);
+        let mut pkg_list = column![]
+            .spacing(14)
+            .width(Length::Fill)
+            .padding(padding::right(20));
 
         for cat in &categories {
             let cat_pkgs: Vec<&&Package> = queue.iter().filter(|p| p.category == *cat).collect();

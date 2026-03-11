@@ -245,8 +245,8 @@ id = "rust"
 name = "Rust"
 description = "Systems programming language via rustup"
 category = "development"
-winget_id = "Rustlang.Rustup"
 profiles = ["desktop"]
+install_command = "start https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe"
 
 [[packages]]
 id = "starship"
