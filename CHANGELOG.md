@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - 2026-03-11
+
+### Changed
+
+- Deduplicate upgrade/uninstall batch streams via shared `BatchItem` trait and `run_winget_batch()`
+- Deduplicate scan operations via shared `ScanEvent` enum and `run_winget_scan()`
+- Add `LogBuffer` with `RefCell`-cached `joined()` to avoid per-frame string joins in view
+- Cache `search_lower` and `categories` on App to avoid per-frame recomputation
+- Extract `common_args()` in settings to deduplicate install/uninstall arg building
+- Extract `action_card()` helper in views replacing 3 copy-pasted card blocks
+- Simplify `CopyLog` to read from state instead of cloning entire log vector
+- Take `InstallProgress` by value in `handle_event` to avoid unnecessary string clones
+
 ## [0.3.0] - 2026-03-11
 
 ### Added
