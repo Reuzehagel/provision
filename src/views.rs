@@ -126,7 +126,7 @@ impl App {
 
         // Scan status
         let scan_status = if self.installed_scan_done {
-            let count = self.installed.len();
+            let count = self.installed_map.len();
             status_indicator(Icon::Check, format!("{count} packages detected"), MUTED)
         } else {
             spinner_indicator(

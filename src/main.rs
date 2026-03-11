@@ -26,7 +26,7 @@ impl App {
     pub(crate) fn is_installed(&self, pkg: &Package) -> bool {
         pkg.winget_id_lower
             .as_ref()
-            .is_some_and(|wid| self.installed.contains_key(wid))
+            .is_some_and(|wid| self.installed_map.contains_key(wid))
     }
 }
 
@@ -226,8 +226,10 @@ pub(crate) struct App {
     // Install state
     pub(crate) install_queue: Vec<Package>,
     pub(crate) install: ProgressState,
-    /// Installed packages detected at startup: winget_id (lowercase) -> version
-    pub(crate) installed: HashMap<String, String>,
+    /// Full installed package data from winget list (for uninstall screen)
+    pub(crate) installed_packages: Vec<upgrade::InstalledPackage>,
+    /// Installed packages: winget_id (lowercase) -> version (for O(1) is_installed lookups)
+    pub(crate) installed_map: HashMap<String, String>,
     pub(crate) installed_scan_done: bool,
     pub(crate) _installed_scan_handle: Option<task::Handle>,
     // Update scan + upgrade state
@@ -278,7 +280,8 @@ impl App {
                 settings_tab: settings::SettingsTab::default(),
                 install_queue: Vec::new(),
                 install: ProgressState::default(),
-                installed: HashMap::new(),
+                installed_packages: Vec::new(),
+                installed_map: HashMap::new(),
                 installed_scan_done: false,
                 _installed_scan_handle: Some(scan_handle.abort_on_drop()),
                 update_scan: UpdateScanState::default(),
@@ -523,9 +526,11 @@ impl App {
         match event {
             upgrade::InstalledScanProgress::Activity { .. } => {}
             upgrade::InstalledScanProgress::Completed { packages } => {
-                for pkg in packages {
-                    self.installed.insert(pkg.winget_id, pkg.version);
-                }
+                self.installed_map = packages
+                    .iter()
+                    .map(|p| (p.winget_id_lower.clone(), p.version.clone()))
+                    .collect();
+                self.installed_packages = packages;
                 self.installed_scan_done = true;
                 self._installed_scan_handle = None;
             }

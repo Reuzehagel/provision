@@ -6,9 +6,15 @@ use tokio::process::Command;
 use crate::install::{self, InstallProgress, LineEvent, Sender};
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Fields used in upcoming uninstall screen
 pub struct InstalledPackage {
-    pub winget_id: String,
+    pub name: String,
+    pub winget_id: String, // original case for winget uninstall --id
     pub version: String,
+    pub source: String,
+    pub winget_id_lower: String, // precomputed for search & is_installed()
+    pub name_lower: String,      // precomputed for search
+    pub size_bytes: Option<u64>, // filled async from registry
 }
 
 #[derive(Debug, Clone)]
@@ -63,24 +69,49 @@ pub fn scan_installed(dry_run: bool) -> impl futures::Stream<Item = InstalledSca
 
                 let fake = vec![
                     InstalledPackage {
+                        name: "Git".into(),
                         winget_id: "Git.Git".into(),
                         version: "2.47.0".into(),
+                        source: "winget".into(),
+                        winget_id_lower: "git.git".into(),
+                        name_lower: "git".into(),
+                        size_bytes: None,
                     },
                     InstalledPackage {
+                        name: "Mozilla Firefox".into(),
                         winget_id: "Mozilla.Firefox".into(),
                         version: "131.0".into(),
+                        source: "winget".into(),
+                        winget_id_lower: "mozilla.firefox".into(),
+                        name_lower: "mozilla firefox".into(),
+                        size_bytes: None,
                     },
                     InstalledPackage {
+                        name: "7-Zip".into(),
                         winget_id: "7zip.7zip".into(),
                         version: "24.08".into(),
+                        source: "winget".into(),
+                        winget_id_lower: "7zip.7zip".into(),
+                        name_lower: "7-zip".into(),
+                        size_bytes: None,
                     },
                     InstalledPackage {
+                        name: "Windows Terminal".into(),
                         winget_id: "Microsoft.WindowsTerminal".into(),
                         version: "1.21.0".into(),
+                        source: "winget".into(),
+                        winget_id_lower: "microsoft.windowsterminal".into(),
+                        name_lower: "windows terminal".into(),
+                        size_bytes: None,
                     },
                     InstalledPackage {
+                        name: "Visual Studio Code".into(),
                         winget_id: "Microsoft.VisualStudioCode".into(),
                         version: "1.95.0".into(),
+                        source: "winget".into(),
+                        winget_id_lower: "microsoft.visualstudiocode".into(),
+                        name_lower: "visual studio code".into(),
+                        size_bytes: None,
                     },
                 ];
 
@@ -158,6 +189,7 @@ pub fn parse_list_table(lines: &[String]) -> Vec<InstalledPackage> {
         return Vec::new();
     };
 
+    let name_col = header.find("Name").unwrap_or(0);
     let version_end = header.find("Source").unwrap_or(usize::MAX);
     let data_start = find_data_start(lines, header_idx);
 
@@ -168,11 +200,17 @@ pub fn parse_list_table(lines: &[String]) -> Vec<InstalledPackage> {
             continue;
         }
 
+        let name = safe_slice(line, name_col, id_col);
         let id = safe_slice(line, id_col, version_col);
         let version = if version_end < usize::MAX {
             safe_slice(line, version_col, version_end)
         } else {
             safe_slice_to_end(line, version_col)
+        };
+        let source = if version_end < usize::MAX && line.len() > version_end {
+            safe_slice_to_end(line, version_end)
+        } else {
+            String::new()
         };
 
         if id.is_empty() {
@@ -180,8 +218,13 @@ pub fn parse_list_table(lines: &[String]) -> Vec<InstalledPackage> {
         }
 
         packages.push(InstalledPackage {
-            winget_id: id.to_lowercase(),
+            name_lower: name.to_lowercase(),
+            winget_id_lower: id.to_lowercase(),
+            name,
+            winget_id: id,
             version,
+            source,
+            size_bytes: None,
         });
     }
 
