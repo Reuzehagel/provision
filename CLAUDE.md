@@ -58,7 +58,7 @@ The workflow builds a release binary on `windows-latest`, renames it to `provisi
 
 Iced (0.14) Elm-style architecture: **State → Message → Update → View**.
 
-- **`src/main.rs`** — `App` struct, `Message` enum, `Screen` enum, `ProgressState`, `UpdateScanState`, thin `update()` dispatcher + `handle_*()` domain methods (navigation, install, upgrade, selection, export/import, keyboard), `view()` dispatch, `subscription()` for keyboard shortcuts. Helper method `is_installed()` for checking install state. Free functions: `toggle_set()` for bulk select/deselect. No view or style code. Also: `SPINNER_FRAMES` constant, `SpinnerTick` message + conditional `time::every` subscription for animated loading states.
+- **`src/main.rs`** — `App` struct, `Message` enum, `Screen` enum, `ProgressState`, `UpdateScanState`, thin `update()` dispatcher + `handle_*()` domain methods (navigation, install, upgrade, selection, export/import, keyboard), `view()` dispatch, `subscription()` for keyboard shortcuts. Helper method `is_installed()` for checking install state. Free functions: `toggle_set()` for bulk select/deselect. No view or style code. Also: `SPINNER_FRAMES` constant, `SEARCH_INPUT_ID` constant, `SpinnerTick` message + conditional `time::every` subscription for animated loading states.
 - **`src/views.rs`** — All `view_*` methods (as `impl App`), standalone helpers `terminal_log_box()`, `view_progress_screen()`, `profile_card()`, `package_row()`, `ProgressLabels`.
 - **`src/styles.rs`** — Color constants (zinc palette: `TEXT`, `MUTED`, `MUTED_FG`, `CARD_BG`, `BORDER`, `STATUS_*`), `LUCIDE_FONT` constant, button/card/checkbox/container style functions.
 - **`src/install.rs`** — Install engine. `PackageStatus`/`InstallProgress` enums, `install_all()` returns a stream via `iced::stream::channel`. Reads raw bytes from process stdout with mini terminal emulator (handles `\r`, `\n`, ANSI escapes). Classifies output as `Log` (meaningful) vs `Activity` (transient spinners/progress).
@@ -90,6 +90,7 @@ Screen flow is driven by `Screen` enum variants (`ProfileSelect`, `PackageSelect
 - **Keyboard subscriptions**: No `keyboard::on_key_press` in iced 0.14 — use `keyboard::listen()` which returns `Subscription<keyboard::Event>`. Call `.map()` to convert events to `Message` (requires a catch-all variant like `KeyIgnored` since `.map()` is total). Match on `Event::KeyPressed { key, modifiers, .. }` for key handling.
 - **Subscriptions**: Wire up with `.subscription(App::subscription)` on the application builder. The `subscription()` closure is `'static` — cannot capture `&self`, so route by screen in `update()` instead.
 - **Time subscriptions**: `iced::time::every(Duration)` returns `Subscription<Instant>` (requires `tokio` feature). Combine with keyboard via `Subscription::batch([...])`. Only activate conditional subscriptions (like spinner ticks) when needed to avoid unnecessary redraws.
+- **Programmatic focus**: `widget::operation::focus(widget::Id::new("my_id"))` returns `Task<T>` to focus a widget. Pair with `.id(iced::widget::Id::new("my_id"))` on the `text_input`. Defined in `iced::widget::operation` (re-exported from `iced_runtime::widget::operation`).
 
 ### Layout & Widgets
 
