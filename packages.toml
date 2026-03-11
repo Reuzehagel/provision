@@ -764,3 +764,14 @@ description = "Collaborative interface design tool"
 category = "design"
 winget_id = "Figma.Figma"
 profiles = ["laptop", "desktop"]
+
+
+# ── Tweaks ──────────────────────────────────────────────────
+
+[[packages]]
+id = "remove-windows-ai"
+name = "Remove Windows AI"
+description = "Remove Windows AI features (Copilot, Recall, etc.)"
+category = "tweaks"
+profiles = ["laptop", "desktop"]
+install_command = "powershell.exe -ExecutionPolicy Bypass -c \"& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/zoicware/RemoveWindowsAI/main/RemoveWindowsAi.ps1')))\""

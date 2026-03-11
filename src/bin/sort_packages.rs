@@ -33,6 +33,7 @@ const CATEGORY_ORDER: &[&str] = &[
     "utilities",
     "security-privacy",
     "design",
+    "tweaks",
 ];
 
 fn category_display_name(slug: &str) -> &str {
@@ -47,6 +48,7 @@ fn category_display_name(slug: &str) -> &str {
         "utilities" => "Utilities",
         "security-privacy" => "Security & Privacy",
         "design" => "Design",
+        "tweaks" => "Tweaks",
         _ => slug,
     }
 }
