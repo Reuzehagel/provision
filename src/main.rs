@@ -3,6 +3,7 @@ mod install;
 mod profile;
 mod settings;
 mod styles;
+mod sysinfo;
 mod theme;
 mod upgrade;
 mod version;
@@ -239,6 +240,8 @@ pub(crate) struct App {
     // Version check state
     pub(crate) latest_release: Option<version::LatestRelease>,
     pub(crate) version_check_in_progress: bool,
+    // System info
+    pub(crate) system_info: sysinfo::SystemInfo,
     // Spinner animation
     pub(crate) spinner_frame: usize,
 }
@@ -285,6 +288,7 @@ impl App {
                 upgrade_queue: Vec::new(),
                 upgrade: ProgressState::default(),
                 selection_status: None,
+                system_info: sysinfo::gather(),
                 latest_release: None,
                 version_check_in_progress: !dry_run,
                 spinner_frame: 0,

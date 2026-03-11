@@ -43,6 +43,29 @@ impl App {
             .spacing(8)
             .align_x(iced::Alignment::Center);
 
+        // System info banner
+        let si = &self.system_info;
+        let sys_icon = text(char::from(Icon::Monitor))
+            .size(14)
+            .font(LUCIDE_FONT)
+            .color(MUTED);
+        let sys_hostname = text(&si.hostname).size(13).color(TEXT);
+        let sys_details = text(format!(
+            "{} · {} · {:.0} GB RAM",
+            si.os_version, si.cpu_name, si.ram_gb
+        ))
+        .size(12)
+        .color(MUTED);
+        let sys_info_col = column![sys_hostname, sys_details].spacing(2);
+        let sys_banner = container(
+            row![sys_icon, sys_info_col]
+                .spacing(10)
+                .align_y(iced::Alignment::Center),
+        )
+        .padding([10, 14])
+        .width(Length::Fill)
+        .style(icon_box_style);
+
         // Profile cards — top row: Personal + Work; bottom row: Manual (full width)
         let [a, b, c] = Profile::ALL.map(|p| profile_card(p, self.selected_profile));
 
@@ -149,7 +172,7 @@ impl App {
         .spacing(12)
         .align_y(iced::Alignment::Center);
 
-        let mut content = column![heading_cluster, grid, divider]
+        let mut content = column![heading_cluster, sys_banner, grid, divider]
             .spacing(14)
             .align_x(iced::Alignment::Center)
             .max_width(500);

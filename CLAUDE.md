@@ -68,6 +68,7 @@ Iced (0.14) Elm-style architecture: **State → Message → Update → View**.
 - **`src/profile.rs`** — `Profile` enum (Laptop, Desktop, Manual) with metadata methods (`title`, `description`, `icon`, `slug`) and `Profile::ALL` constant.
 - **`src/theme.rs`** — Custom theme via `Theme::custom("provision", Palette { ... })` with Tailwind zinc neutrals and blue/emerald/red/amber accents.
 - **`src/version.rs`** — GitHub release version checker. `LatestRelease` struct, `check_latest_release(force)` async fn with 24h JSON cache in `%APPDATA%\provision`, `is_newer()` semver compare.
+- **`src/sysinfo.rs`** — `SystemInfo` struct (hostname, OS version, CPU, RAM) and `gather()` fn using `sysinfo` crate. Called once at startup, displayed on profile screen.
 - **`src/bin/sort_packages.rs`** — Utility binary (`just sort-packages`) that reads `packages.toml`, groups by category in a fixed display order, sorts alphabetically within each category, and rewrites the file.
 - **`packages.toml`** — Package catalog embedded in the binary at compile time. Each entry has `id`, `name`, `description`, `category`, `winget_id`, `profiles`, and optional `post_install`/`install_command`.
 - **`DESIGN.md`** — Design system reference (color tokens, spacing, component patterns).
@@ -128,6 +129,7 @@ Screen flow is driven by `Screen` enum variants (`ProfileSelect`, `PackageSelect
 - **reqwest**: Only `rustls` feature is enabled (no `json` feature). Use `.text().await` + `serde_json::from_str()` instead of `.json().await`.
 - **UTF-8 safe slicing**: When slicing strings at byte offsets (e.g. parsing winget column-aligned tables), snap to char boundaries with `str::is_char_boundary()` — multi-byte chars like `…` cause panics
 - **Winget piped output**: Winget outputs spinner frames as individual `\r\n` lines when piped. Read raw bytes and classify transient vs meaningful output — don't use `lines()` reader
+- **`sysinfo` crate (v0.35)**: `CpuRefreshKind::nothing()` won't populate CPU brand — use `everything()`. `System::os_version()` returns NT kernel version (e.g. "10.0.26100") which is misleading on Windows 11 — prefer `System::long_os_version()` for user-facing display. `MemoryRefreshKind::nothing().with_ram()` is sufficient for `total_memory()`.
 
 ### Rust Patterns
 
