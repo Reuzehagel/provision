@@ -12,9 +12,9 @@ mod views;
 
 use std::collections::{HashMap, HashSet};
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use iced::{Element, Size, Subscription, Task, Theme, clipboard, keyboard, task, time};
+use iced::{Element, Size, Subscription, Task, Theme, clipboard, keyboard, task, time, widget};
 
 use catalog::{CatalogSource, Package};
 use install::PackageStatus;
@@ -22,6 +22,7 @@ use profile::Profile;
 use upgrade::UpgradeablePackage;
 
 pub(crate) const SPINNER_FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+pub(crate) const SEARCH_INPUT_ID: &str = "search_input";
 
 impl App {
     /// Check whether a package from the catalog is already installed.
@@ -107,6 +108,7 @@ pub(crate) struct ProgressState {
     pub(crate) live_line: String,
     pub(crate) done: bool,
     pub(crate) copy_status: bool,
+    pub(crate) started_at: Option<Instant>,
     pub(crate) _handle: Option<task::Handle>,
 }
 
@@ -120,6 +122,7 @@ impl ProgressState {
         self.live_line.clear();
         self.done = false;
         self.copy_status = false;
+        self.started_at = Some(Instant::now());
     }
 
     fn handle_event(
@@ -181,6 +184,15 @@ impl ProgressState {
         self.live_line.clear();
         self.log.push(String::new());
         self.log.push(format!("--- {label} cancelled ---"));
+    }
+
+    pub(crate) fn elapsed_display(&self) -> String {
+        let secs = self.started_at.map(|t| t.elapsed().as_secs()).unwrap_or(0);
+        if secs < 60 {
+            format!("{secs}s")
+        } else {
+            format!("{}m {}s", secs / 60, secs % 60)
+        }
     }
 
     pub(crate) fn status_counts(&self) -> (usize, usize, usize) {
@@ -380,6 +392,7 @@ pub(crate) enum Message {
     SizeScanResult(Vec<(String, u64)>),
     KeyConfirm,
     KeyEscape,
+    FocusSearch,
     SelectAll,
     SpinnerTick,
     KeyIgnored,
@@ -450,6 +463,7 @@ impl App {
             }
             Message::KeyConfirm => self.handle_key_confirm(),
             Message::KeyEscape => self.handle_key_escape(),
+            Message::FocusSearch => self.handle_focus_search(),
             // ── Inline one-liners ────────────────────────────────────
             Message::TogglePackage(id) => {
                 if !self.selected.remove(&id) {
@@ -1093,6 +1107,15 @@ impl App {
         }
     }
 
+    fn handle_focus_search(&self) -> Task<Message> {
+        match self.screen {
+            Screen::PackageSelect | Screen::UpdateSelect | Screen::UninstallSelect => {
+                widget::operation::focus(widget::Id::new(SEARCH_INPUT_ID))
+            }
+            _ => Task::none(),
+        }
+    }
+
     fn view(&self) -> Element<'_, Message> {
         match self.screen {
             Screen::ProfileSelect => self.view_profile_select(),
@@ -1118,6 +1141,7 @@ impl App {
                 keyboard::Key::Named(keyboard::key::Named::Escape) if modifiers.is_empty() => {
                     Message::KeyEscape
                 }
+                keyboard::Key::Character("k") if modifiers.command() => Message::FocusSearch,
                 keyboard::Key::Character("a") if modifiers.command() => Message::SelectAll,
                 _ => Message::KeyIgnored,
             },

@@ -4,12 +4,12 @@ use iced::widget::{
 };
 use iced::{Element, Length, Theme, padding};
 
-use crate::SPINNER_FRAMES;
 use crate::catalog::{self, CatalogSource, Package};
 use crate::install::PackageStatus;
 use crate::profile::Profile;
 use crate::settings::{InstallMode, OptionalArchitecture, OptionalScope, SettingsTab};
 use crate::upgrade::UpgradeablePackage;
+use crate::{SEARCH_INPUT_ID, SPINNER_FRAMES};
 use lucide_icons::Icon;
 
 use crate::styles::{
@@ -1277,6 +1277,7 @@ fn back_header(title: &str) -> iced::widget::Row<'_, Message> {
 /// Back-button header with a search field on the right.
 fn search_header<'a>(title: &'a str, search: &'a str) -> iced::widget::Row<'a, Message> {
     let search_field = text_input("Search...", search)
+        .id(iced::widget::Id::new(SEARCH_INPUT_ID))
         .on_input(Message::SearchChanged)
         .padding(8)
         .size(14)
@@ -1397,7 +1398,11 @@ fn view_progress_screen<'a>(
         } else {
             labels.verb.to_string()
         };
-        let count_text = format!("{} of {total}", state.current + 1);
+        let count_text = format!(
+            "{} of {total} \u{00b7} {}",
+            state.current + 1,
+            state.elapsed_display()
+        );
         row![
             text(verb_text).size(20),
             text(count_text).size(14).color(MUTED),
@@ -1451,6 +1456,16 @@ fn view_progress_screen<'a>(
                         .color(STATUS_AMBER),
                 );
         }
+
+        counts = counts
+            .push(text("\u{00b7}").size(13).color(MUTED))
+            .push(
+                text(char::from(Icon::Clock))
+                    .size(13)
+                    .font(LUCIDE_FONT)
+                    .color(MUTED),
+            )
+            .push(text(state.elapsed_display()).size(13).color(MUTED));
 
         counts.into()
     } else if dry_run {
