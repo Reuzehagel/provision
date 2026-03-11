@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-03-11
+
+### Added
+
+- Animated braille dots spinner on all loading states (installed scan, install, upgrade, update scan)
+- GitHub release version checker with 24-hour cache
+- Update-available banner on profile select screen with link to release page
+- App updates section in settings with manual "Check now" button
+
+### Fixed
+
+- Review screen scrollbar overlapping content
+
 ## [0.1.0] - 2025-05-01
 
 ### Added

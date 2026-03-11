@@ -1,6 +1,6 @@
 [package]
 name = "provision"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 default-run = "provision"
 description = "A GUI tool that takes a fresh Windows machine from just installed to ready to use"
