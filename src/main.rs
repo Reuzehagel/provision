@@ -5,16 +5,21 @@ mod settings;
 mod styles;
 mod theme;
 mod upgrade;
+mod version;
 mod views;
 
 use std::collections::{HashMap, HashSet};
 
-use iced::{Element, Size, Task, Theme, clipboard, keyboard, task};
+use std::time::Duration;
+
+use iced::{Element, Size, Subscription, Task, Theme, clipboard, keyboard, task, time};
 
 use catalog::{CatalogSource, Package};
 use install::PackageStatus;
 use profile::Profile;
 use upgrade::UpgradeablePackage;
+
+pub(crate) const SPINNER_FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
 impl App {
     /// Check whether a package from the catalog is already installed.
@@ -231,6 +236,11 @@ pub(crate) struct App {
     pub(crate) upgrade: ProgressState,
     /// Transient status message for export/import feedback.
     pub(crate) selection_status: Option<String>,
+    // Version check state
+    pub(crate) latest_release: Option<version::LatestRelease>,
+    pub(crate) version_check_in_progress: bool,
+    // Spinner animation
+    pub(crate) spinner_frame: usize,
 }
 
 impl App {
@@ -245,6 +255,15 @@ impl App {
             catalog::fetch_remote_catalog(dry_run),
             Message::CatalogFetched,
         );
+
+        let version_task = if dry_run {
+            Task::none()
+        } else {
+            Task::perform(
+                version::check_latest_release(false),
+                Message::VersionCheckCompleted,
+            )
+        };
 
         (
             Self {
@@ -266,8 +285,11 @@ impl App {
                 upgrade_queue: Vec::new(),
                 upgrade: ProgressState::default(),
                 selection_status: None,
+                latest_release: None,
+                version_check_in_progress: !dry_run,
+                spinner_frame: 0,
             },
-            Task::batch([scan_task, catalog_task]),
+            Task::batch([scan_task, catalog_task, version_task]),
         )
     }
 }
@@ -324,9 +346,14 @@ pub(crate) enum Message {
     ToggleIgnoreSecurityHash(bool),
     ToggleDisableInteractivity(bool),
     SetInstallLocation(String),
+    VersionCheckCompleted(Result<version::LatestRelease, String>),
+    CheckForAppUpdate,
+    OpenReleasePage,
+    DismissUpdateBanner,
     KeyConfirm,
     KeyEscape,
     SelectAll,
+    SpinnerTick,
     KeyIgnored,
     #[allow(dead_code)]
     Noop(()),
@@ -378,6 +405,13 @@ impl App {
             Message::ImportSelection => self.handle_import_selection(),
             Message::ImportCompleted(r) => self.handle_import_completed(r),
             Message::CopyLog(lines) => self.handle_copy_log(lines),
+            Message::VersionCheckCompleted(r) => self.handle_version_check_completed(r),
+            Message::CheckForAppUpdate => self.handle_check_for_app_update(),
+            Message::OpenReleasePage => self.handle_open_release_page(),
+            Message::DismissUpdateBanner => {
+                self.latest_release = None;
+                Task::none()
+            }
             Message::KeyConfirm => self.handle_key_confirm(),
             Message::KeyEscape => self.handle_key_escape(),
             // ── Inline one-liners ────────────────────────────────────
@@ -449,6 +483,10 @@ impl App {
             }
             Message::SetInstallLocation(v) => {
                 self.settings.install_location = v;
+                Task::none()
+            }
+            Message::SpinnerTick => {
+                self.spinner_frame = (self.spinner_frame + 1) % SPINNER_FRAMES.len();
                 Task::none()
             }
             Message::KeyIgnored | Message::Noop(()) => Task::none(),
@@ -820,6 +858,44 @@ impl App {
         ])
     }
 
+    // ── Version check ────────────────────────────────────────────
+
+    fn handle_version_check_completed(
+        &mut self,
+        result: Result<version::LatestRelease, String>,
+    ) -> Task<Message> {
+        self.version_check_in_progress = false;
+        if let Ok(release) = result
+            && version::is_newer(&release.version, env!("CARGO_PKG_VERSION"))
+        {
+            self.latest_release = Some(release);
+        }
+        Task::none()
+    }
+
+    fn handle_check_for_app_update(&mut self) -> Task<Message> {
+        self.version_check_in_progress = true;
+        Task::perform(
+            version::check_latest_release(true),
+            Message::VersionCheckCompleted,
+        )
+    }
+
+    fn handle_open_release_page(&mut self) -> Task<Message> {
+        if let Some(release) = &self.latest_release {
+            let url = release.html_url.clone();
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                let _ = std::process::Command::new("cmd")
+                    .args(["/c", "start", &url])
+                    .creation_flags(0x08000000)
+                    .spawn();
+            }
+        }
+        Task::none()
+    }
+
     // ── Keyboard shortcuts ───────────────────────────────────────
 
     fn handle_key_confirm(&mut self) -> Task<Message> {
@@ -864,8 +940,8 @@ impl App {
         }
     }
 
-    fn subscription(&self) -> iced::Subscription<Message> {
-        keyboard::listen().map(|event| match event {
+    fn subscription(&self) -> Subscription<Message> {
+        let keyboard_sub = keyboard::listen().map(|event| match event {
             keyboard::Event::KeyPressed { key, modifiers, .. } => match key.as_ref() {
                 keyboard::Key::Named(keyboard::key::Named::Enter) if modifiers.is_empty() => {
                     Message::KeyConfirm
@@ -877,7 +953,21 @@ impl App {
                 _ => Message::KeyIgnored,
             },
             _ => Message::KeyIgnored,
-        })
+        });
+
+        let spinner_active = !self.installed_scan_done
+            || matches!(self.screen, Screen::Installing if !self.install.done)
+            || matches!(self.screen, Screen::UpdateScanning if !self.update_scan.done)
+            || matches!(self.screen, Screen::Updating if !self.upgrade.done);
+
+        if spinner_active {
+            Subscription::batch([
+                keyboard_sub,
+                time::every(Duration::from_millis(80)).map(|_| Message::SpinnerTick),
+            ])
+        } else {
+            keyboard_sub
+        }
     }
 
     fn theme(&self) -> Theme {

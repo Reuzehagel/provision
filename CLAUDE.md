@@ -58,15 +58,16 @@ The workflow builds a release binary on `windows-latest`, renames it to `provisi
 
 Iced (0.14) Elm-style architecture: **State → Message → Update → View**.
 
-- **`src/main.rs`** — `App` struct, `Message` enum, `Screen` enum, `ProgressState`, `UpdateScanState`, thin `update()` dispatcher + `handle_*()` domain methods (navigation, install, upgrade, selection, export/import, keyboard), `view()` dispatch, `subscription()` for keyboard shortcuts. Helper method `is_installed()` for checking install state. Free functions: `toggle_set()` for bulk select/deselect. No view or style code.
+- **`src/main.rs`** — `App` struct, `Message` enum, `Screen` enum, `ProgressState`, `UpdateScanState`, thin `update()` dispatcher + `handle_*()` domain methods (navigation, install, upgrade, selection, export/import, keyboard), `view()` dispatch, `subscription()` for keyboard shortcuts. Helper method `is_installed()` for checking install state. Free functions: `toggle_set()` for bulk select/deselect. No view or style code. Also: `SPINNER_FRAMES` constant, `SpinnerTick` message + conditional `time::every` subscription for animated loading states.
 - **`src/views.rs`** — All `view_*` methods (as `impl App`), standalone helpers `terminal_log_box()`, `view_progress_screen()`, `profile_card()`, `package_row()`, `ProgressLabels`.
 - **`src/styles.rs`** — Color constants (zinc palette: `TEXT`, `MUTED`, `MUTED_FG`, `CARD_BG`, `BORDER`, `STATUS_*`), `LUCIDE_FONT` constant, button/card/checkbox/container style functions.
 - **`src/install.rs`** — Install engine. `PackageStatus`/`InstallProgress` enums, `install_all()` returns a stream via `iced::stream::channel`. Reads raw bytes from process stdout with mini terminal emulator (handles `\r`, `\n`, ANSI escapes). Classifies output as `Log` (meaningful) vs `Activity` (transient spinners/progress).
 - **`src/upgrade.rs`** — Upgrade & installed-detection engine. `UpgradeablePackage`/`InstalledPackage` structs, `ScanProgress`/`InstalledScanProgress` enums, `scan_upgrades()`/`scan_installed()` stream winget output, `parse_upgrade_table()`/`parse_list_table()` parse column-aligned tables, `upgrade_all()` streams per-package upgrades.
-- **`src/catalog.rs`** — `Package` struct (derives `Deserialize`), `CatalogSource` enum (Embedded/Cached/Remote). `load_catalog()` embeds `packages.toml` via `include_str!`; `fetch_remote_catalog()` tries `%APPDATA%\provision` cache (24h TTL) then GitHub raw URL, falling back to embedded on failure. Also `default_selection()`, `category_display_name()`, `categories()`, `SelectionFile` serde struct, and async `export_selection()`/`import_selection()` using `rfd::AsyncFileDialog` + `tokio::fs`.
+- **`src/catalog.rs`** — `Package` struct (derives `Deserialize`), `CatalogSource` enum (Embedded/Cached/Remote). `load_catalog()` embeds `packages.toml` via `include_str!`; `fetch_remote_catalog()` tries `%APPDATA%\provision` cache (24h TTL) then GitHub raw URL, falling back to embedded on failure. Also `default_selection()`, `category_display_name()`, `categories()`, `SelectionFile` serde struct, and async `export_selection()`/`import_selection()` using `rfd::AsyncFileDialog` + `tokio::fs`. Shared `pub(crate)` constants: `CACHE_MAX_AGE`, `FETCH_TIMEOUT`, `dirs_cache_dir()`.
 - **`src/settings.rs`** — `WingetSettings` struct (persisted to `%APPDATA%\provision\settings.toml` via `load_settings()`/`save_settings()`). `SettingsTab` enum (`Winget`, `Changelog`). `InstallMode`, `InstallScope`, `Architecture` enums with Display impls for pick_list. `OptionalScope`/`OptionalArchitecture` newtypes showing "Default" for `None`. `install_args()` builds extra CLI flags for install/upgrade commands.
 - **`src/profile.rs`** — `Profile` enum (Laptop, Desktop, Manual) with metadata methods (`title`, `description`, `icon`, `slug`) and `Profile::ALL` constant.
 - **`src/theme.rs`** — Custom theme via `Theme::custom("provision", Palette { ... })` with Tailwind zinc neutrals and blue/emerald/red/amber accents.
+- **`src/version.rs`** — GitHub release version checker. `LatestRelease` struct, `check_latest_release(force)` async fn with 24h JSON cache in `%APPDATA%\provision`, `is_newer()` semver compare.
 - **`src/bin/sort_packages.rs`** — Utility binary (`just sort-packages`) that reads `packages.toml`, groups by category in a fixed display order, sorts alphabetically within each category, and rewrites the file.
 - **`packages.toml`** — Package catalog embedded in the binary at compile time. Each entry has `id`, `name`, `description`, `category`, `winget_id`, `profiles`, and optional `post_install`/`install_command`.
 - **`DESIGN.md`** — Design system reference (color tokens, spacing, component patterns).
@@ -86,6 +87,7 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 - **`futures` crate**: Not a direct dep — use `iced::futures` and `iced::futures::SinkExt as _` for the re-export
 - **Keyboard subscriptions**: No `keyboard::on_key_press` in iced 0.14 — use `keyboard::listen()` which returns `Subscription<keyboard::Event>`. Call `.map()` to convert events to `Message` (requires a catch-all variant like `KeyIgnored` since `.map()` is total). Match on `Event::KeyPressed { key, modifiers, .. }` for key handling.
 - **Subscriptions**: Wire up with `.subscription(App::subscription)` on the application builder. The `subscription()` closure is `'static` — cannot capture `&self`, so route by screen in `update()` instead.
+- **Time subscriptions**: `iced::time::every(Duration)` returns `Subscription<Instant>` (requires `tokio` feature). Combine with keyboard via `Subscription::batch([...])`. Only activate conditional subscriptions (like spinner ticks) when needed to avoid unnecessary redraws.
 
 ### Layout & Widgets
 
@@ -111,6 +113,8 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 - Named color constants live in `styles.rs`: zinc palette (`TEXT`, `MUTED_FG`, `MUTED`, `TERMINAL_TEXT`, `CARD_BG`, `CARD_HOVER`, `BORDER`, `BORDER_FOCUS`) + accents (`STATUS_BLUE`, `STATUS_GREEN`, `STATUS_RED`, `STATUS_AMBER`) — prefer constants over inline `Color::from_rgb(...)` when used more than once
 - Button styles: extract to standalone functions (`card_style`, `ghost_button_style`, etc.) when reusable; inline closures only for one-offs
 - **Icons**: Lucide icons via `lucide-icons` crate. Use `text(char::from(Icon::ChevronLeft)).font(LUCIDE_FONT)` with the type-safe `lucide_icons::Icon` enum — never hardcode codepoints. `LUCIDE_FONT` constant is in `styles.rs`. Load font bytes via `.font(lucide_icons::LUCIDE_FONT_BYTES)` on the application builder. Emoji chars do NOT render in Iced — always use an icon font.
+- **Icon naming**: The `lucide-icons` crate converts kebab-case icon names to PascalCase (e.g. `circle-arrow-up` → `Icon::CircleArrowUp`). Check https://lucide.dev/icons/ for canonical names — don't guess.
+- **Animated spinner**: `SPINNER_FRAMES` constant in `main.rs` (braille dots_1 pattern, 80ms tick). `spinner_indicator()` helper in `views.rs` for status rows. When mixing spinner chars (default font) with Lucide icons (`LUCIDE_FONT`) in the same list, build each as a separate `Element` rather than using a shared `(char, Color)` tuple with uniform `.font()`.
 
 ### Data & Serde
 
@@ -120,6 +124,7 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 ### Process & IO
 
 - **Spawning processes on Windows**: Use `tokio::process::Command` with `.creation_flags(0x08000000)` (`CREATE_NO_WINDOW`) to prevent console windows flashing. Use `.stderr(Stdio::null())` unless you consume stderr — piped-but-unread stderr deadlocks when the buffer fills.
+- **reqwest**: Only `rustls` feature is enabled (no `json` feature). Use `.text().await` + `serde_json::from_str()` instead of `.json().await`.
 - **UTF-8 safe slicing**: When slicing strings at byte offsets (e.g. parsing winget column-aligned tables), snap to char boundaries with `str::is_char_boundary()` — multi-byte chars like `…` cause panics
 - **Winget piped output**: Winget outputs spinner frames as individual `\r\n` lines when piped. Read raw bytes and classify transient vs meaningful output — don't use `lines()` reader
 

@@ -215,6 +215,30 @@ pub fn card_style(_theme: &Theme, status: button::Status, selected: bool) -> but
     }
 }
 
+pub fn update_banner_style(_theme: &Theme, status: button::Status) -> button::Style {
+    let bg_alpha = match status {
+        button::Status::Hovered => 0.12,
+        _ => 0.08,
+    };
+
+    button::Style {
+        background: Some(Background::Color(Color::from_rgba(
+            STATUS_AMBER.r,
+            STATUS_AMBER.g,
+            STATUS_AMBER.b,
+            bg_alpha,
+        ))),
+        text_color: TEXT,
+        border: Border {
+            color: Color::from_rgba(STATUS_AMBER.r, STATUS_AMBER.g, STATUS_AMBER.b, 0.3),
+            width: 1.0,
+            radius: 8.0.into(),
+        },
+        shadow: Shadow::default(),
+        snap: false,
+    }
+}
+
 pub fn update_card_style(_theme: &Theme, status: button::Status) -> button::Style {
     let bg = match status {
         button::Status::Hovered => CARD_BG,

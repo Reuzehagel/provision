@@ -4,6 +4,7 @@ use iced::widget::{
 };
 use iced::{Element, Length, Theme, padding};
 
+use crate::SPINNER_FRAMES;
 use crate::catalog::{self, CatalogSource, Package};
 use crate::install::PackageStatus;
 use crate::profile::Profile;
@@ -16,7 +17,7 @@ use crate::styles::{
     TERMINAL_TEXT, TEXT, browser_badge_style, cancel_button_style, card_style,
     continue_button_style, divider_style, ghost_button_style, icon_box_style,
     installed_badge_style, package_checkbox_style, tab_style, terminal_box_style,
-    update_card_style, warning_badge_style,
+    update_banner_style, update_card_style, warning_badge_style,
 };
 use crate::{App, Message, ProgressState};
 
@@ -128,7 +129,11 @@ impl App {
             let count = self.installed.len();
             status_indicator(Icon::Check, format!("{count} packages detected"), MUTED)
         } else {
-            status_indicator(Icon::Loader, "Scanning installed packages...".into(), MUTED)
+            spinner_indicator(
+                self.spinner_frame,
+                "Scanning installed packages...".into(),
+                MUTED,
+            )
         };
 
         let version_label = text(format!("v{}", env!("CARGO_PKG_VERSION")))
@@ -144,17 +149,54 @@ impl App {
         .spacing(12)
         .align_y(iced::Alignment::Center);
 
-        let content = column![
-            heading_cluster,
-            grid,
-            divider,
-            update_card,
-            settings_card,
-            status_row,
-        ]
-        .spacing(14)
-        .align_x(iced::Alignment::Center)
-        .max_width(500);
+        let mut content = column![heading_cluster, grid, divider]
+            .spacing(14)
+            .align_x(iced::Alignment::Center)
+            .max_width(500);
+
+        // Update available banner
+        if let Some(release) = &self.latest_release {
+            let banner_icon = text(char::from(Icon::CircleArrowUp))
+                .size(15)
+                .font(LUCIDE_FONT)
+                .color(STATUS_AMBER);
+            let banner_text = text(format!("v{} available", release.version))
+                .size(14)
+                .color(TEXT);
+            let banner_link = text("View release →").size(13).color(STATUS_AMBER);
+            let dismiss_icon = text(char::from(Icon::X))
+                .size(14)
+                .font(LUCIDE_FONT)
+                .color(MUTED_FG);
+            let dismiss_btn = button(dismiss_icon)
+                .on_press(Message::DismissUpdateBanner)
+                .style(ghost_button_style)
+                .padding([4, 6]);
+
+            let banner_content = row![
+                banner_icon,
+                banner_text,
+                banner_link,
+                iced::widget::Space::new().width(Length::Fill),
+                dismiss_btn,
+            ]
+            .spacing(10)
+            .align_y(iced::Alignment::Center)
+            .padding([12, 16])
+            .width(Length::Fill);
+
+            let banner = button(banner_content)
+                .on_press(Message::OpenReleasePage)
+                .width(Length::Fill)
+                .style(update_banner_style);
+
+            content = content.push(banner);
+        }
+
+        let content = content
+            .push(update_card)
+            .push(settings_card)
+            .push(status_row);
 
         container(content)
             .center_x(Length::Fill)
@@ -499,6 +541,7 @@ impl App {
             self.dry_run,
             Message::CancelInstall,
             Message::FinishAndReset,
+            self.spinner_frame,
         )
     }
 
@@ -517,14 +560,25 @@ impl App {
             text("Scanning for updates...").size(20)
         };
 
-        let subtitle = if let Some(ref err) = scan.error {
-            text(err.clone()).size(14).color(STATUS_RED)
+        let subtitle: Element<'_, Message> = if let Some(ref err) = scan.error {
+            text(err.clone()).size(14).color(STATUS_RED).into()
         } else if scan.done {
-            text("No outdated packages found.").size(14).color(MUTED)
-        } else {
-            text("Checking installed packages via winget...")
+            text("No outdated packages found.")
                 .size(14)
                 .color(MUTED)
+                .into()
+        } else {
+            row![
+                text(SPINNER_FRAMES[self.spinner_frame])
+                    .size(14)
+                    .color(MUTED),
+                text("Checking installed packages via winget...")
+                    .size(14)
+                    .color(MUTED),
+            ]
+            .spacing(6)
+            .align_y(iced::Alignment::Center)
+            .into()
         };
 
         let log_box = terminal_log_box(&scan.log, &scan.live_line)
@@ -666,6 +720,7 @@ impl App {
             self.dry_run,
             Message::CancelUpgrade,
             Message::FinishUpdateAndReset,
+            self.spinner_frame,
         )
     }
 
@@ -786,6 +841,49 @@ impl App {
             Message::ToggleIgnoreSecurityHash,
         );
 
+        // ── App Updates section ───────────────────────────────────
+        let section_updates = text("APP UPDATES").size(11).color(MUTED_FG);
+
+        let update_status_text: Element<'_, Message> = if self.version_check_in_progress {
+            text("Checking...").size(13).color(MUTED).into()
+        } else if let Some(release) = &self.latest_release {
+            row![
+                text(format!("New version available: v{}", release.version))
+                    .size(13)
+                    .color(STATUS_AMBER),
+            ]
+            .into()
+        } else {
+            text("You're up to date")
+                .size(13)
+                .color(STATUS_GREEN)
+                .into()
+        };
+
+        let mut check_btn = button(text("Check now").size(13))
+            .style(ghost_button_style)
+            .padding([6, 12]);
+        if !self.version_check_in_progress {
+            check_btn = check_btn.on_press(Message::CheckForAppUpdate);
+        }
+
+        let mut update_row = row![
+            update_status_text,
+            iced::widget::Space::new().width(Length::Fill),
+            check_btn
+        ]
+        .spacing(12)
+        .align_y(iced::Alignment::Center)
+        .width(Length::Fill);
+
+        if !self.version_check_in_progress && self.latest_release.is_some() {
+            let view_btn = button(text("View release →").size(13).color(STATUS_AMBER))
+                .on_press(Message::OpenReleasePage)
+                .style(ghost_button_style)
+                .padding([6, 12]);
+            update_row = update_row.push(view_btn);
+        }
+
         let settings_list = column![
             subtitle,
             section_behavior,
@@ -798,6 +896,8 @@ impl App {
             interactivity_row,
             unknown_row,
             hash_row,
+            section_updates,
+            update_row,
         ]
         .spacing(12)
         .padding(padding::right(20))
@@ -925,6 +1025,7 @@ fn view_progress_screen<'a>(
     dry_run: bool,
     cancel_msg: Message,
     done_msg: Message,
+    spinner_frame: usize,
 ) -> Element<'a, Message> {
     let names: Vec<&str> = names.collect();
     let total = names.len();
@@ -1019,23 +1120,52 @@ fn view_progress_screen<'a>(
     let active_label = format!("{}...", labels.verb);
     let mut pkg_list = column![].spacing(2).width(Length::Fill);
     for (i, name) in names.iter().enumerate() {
-        let (icon_char, color, label) = match &state.statuses[i] {
-            PackageStatus::Pending => (char::from(Icon::Circle), MUTED, "Pending".into()),
-            PackageStatus::Installing => {
-                (char::from(Icon::Loader), STATUS_BLUE, active_label.clone())
-            }
-            PackageStatus::Done => (char::from(Icon::CircleCheck), STATUS_GREEN, "Done".into()),
+        let (icon, color, label): (Element<'_, Message>, _, _) = match &state.statuses[i] {
+            PackageStatus::Pending => (
+                text(char::from(Icon::Circle))
+                    .size(14)
+                    .font(LUCIDE_FONT)
+                    .color(MUTED)
+                    .into(),
+                MUTED,
+                "Pending".into(),
+            ),
+            PackageStatus::Installing => (
+                text(SPINNER_FRAMES[spinner_frame])
+                    .size(14)
+                    .color(STATUS_BLUE)
+                    .into(),
+                STATUS_BLUE,
+                active_label.clone(),
+            ),
+            PackageStatus::Done => (
+                text(char::from(Icon::CircleCheck))
+                    .size(14)
+                    .font(LUCIDE_FONT)
+                    .color(STATUS_GREEN)
+                    .into(),
+                STATUS_GREEN,
+                "Done".into(),
+            ),
             PackageStatus::Failed(e) => (
-                char::from(Icon::CircleX),
+                text(char::from(Icon::CircleX))
+                    .size(14)
+                    .font(LUCIDE_FONT)
+                    .color(STATUS_RED)
+                    .into(),
                 STATUS_RED,
                 format!("Failed: {e}"),
             ),
-            PackageStatus::Cancelled => {
-                (char::from(Icon::CircleX), STATUS_AMBER, "Cancelled".into())
-            }
+            PackageStatus::Cancelled => (
+                text(char::from(Icon::CircleX))
+                    .size(14)
+                    .font(LUCIDE_FONT)
+                    .color(STATUS_AMBER)
+                    .into(),
+                STATUS_AMBER,
+                "Cancelled".into(),
+            ),
         };
-
-        let icon = text(icon_char).size(14).font(LUCIDE_FONT).color(color);
 
         let pkg_row = row![
             icon,
@@ -1173,6 +1303,17 @@ fn status_indicator(icon: Icon, label: String, color: iced::Color) -> Element<'s
             .size(12)
             .font(LUCIDE_FONT)
             .color(color),
+        text(label).size(12).color(color),
+    ]
+    .spacing(4)
+    .align_y(iced::Alignment::Center)
+    .into()
+}
+
+/// Animated spinner + label row for loading indicators.
+fn spinner_indicator(frame: usize, label: String, color: iced::Color) -> Element<'static, Message> {
+    row![
+        text(SPINNER_FRAMES[frame]).size(12).color(color),
         text(label).size(12).color(color),
     ]
     .spacing(4)

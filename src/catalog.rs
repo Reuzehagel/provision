@@ -76,8 +76,8 @@ pub fn load_catalog() -> Vec<Package> {
 
 const REMOTE_URL: &str =
     "https://raw.githubusercontent.com/Reuzehagel/provision/main/packages.toml";
-const CACHE_MAX_AGE: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
-const FETCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+pub(crate) const CACHE_MAX_AGE: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
+pub(crate) const FETCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// Try to load a fresh catalog from the local cache or GitHub.
 ///
