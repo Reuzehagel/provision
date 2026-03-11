@@ -15,7 +15,7 @@ Windows provisioning GUI built with Rust and Iced. See `DESIGN.md` for design sy
 ## Workflow
 
 - **After making any code changes, always run `just check`** — runs `cargo build`, `clippy`, and `fmt --check` in sequence
-- **Use `cargo run -- --dry` during development** — fake winget data, no real installs. Lets you test UI without winget
+- **Use `cargo run -- --dry` during development** — fake winget data, no real installs. Lets you test UI without winget. Note: no `just dry` shortcut exists; use the cargo command directly.
 
 ## Build & Run
 
@@ -72,7 +72,7 @@ Iced (0.14) Elm-style architecture: **State → Message → Update → View**.
 - **`packages.toml`** — Package catalog embedded in the binary at compile time. Each entry has `id`, `name`, `description`, `category`, `winget_id`, `profiles`, and optional `post_install`/`install_command`.
 - **`DESIGN.md`** — Design system reference (color tokens, spacing, component patterns).
 
-Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*` method on `App`.
+Screen flow is driven by `Screen` enum variants (`ProfileSelect`, `PackageSelect`, `Review`, `Installing`, `UpdateScanning`, `UpdateSelect`, `Updating`, `Settings`). Each variant maps to a `view_*` method on `App`.
 
 ## Conventions
 
@@ -123,7 +123,7 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 
 ### Process & IO
 
-- **Spawning processes on Windows**: Use `tokio::process::Command` with `.creation_flags(0x08000000)` (`CREATE_NO_WINDOW`) to prevent console windows flashing. Use `.stderr(Stdio::null())` unless you consume stderr — piped-but-unread stderr deadlocks when the buffer fills.
+- **Spawning processes on Windows**: Use `tokio::process::Command` with `.creation_flags(0x08000000)` (`CREATE_NO_WINDOW`) to prevent console windows flashing. The constant comes from `windows-sys` crate (`Win32_UI_Shell` + `Win32_Foundation` features). Use `.stderr(Stdio::null())` unless you consume stderr — piped-but-unread stderr deadlocks when the buffer fills.
 - **reqwest**: Only `rustls` feature is enabled (no `json` feature). Use `.text().await` + `serde_json::from_str()` instead of `.json().await`.
 - **UTF-8 safe slicing**: When slicing strings at byte offsets (e.g. parsing winget column-aligned tables), snap to char boundaries with `str::is_char_boundary()` — multi-byte chars like `…` cause panics
 - **Winget piped output**: Winget outputs spinner frames as individual `\r\n` lines when piped. Read raw bytes and classify transient vs meaningful output — don't use `lines()` reader
@@ -136,13 +136,5 @@ Screen flow is driven by `Screen` enum variants. Each variant maps to a `view_*`
 - **Standalone view helpers returning `Element`**: When a free function takes multiple `&str` params and returns `Element<'_, Message>`, Rust can't infer which borrow — use explicit `<'a>` lifetime on all params and the return type.
 - **Threading config into streams**: Stream closures are `'static` — pass owned data (e.g. `Vec<String>` from `settings.install_args()`) into the closure. Use `.iter().cloned()` to extend args vecs inside the stream.
 
-## Roadmap
-
-Potential future features, roughly ordered by impact-to-effort ratio:
-
-1. **Package search** — Search winget's full catalog (`winget search`) and add packages on the fly, not just from the curated `packages.toml`. Reuse existing table parser from `upgrade.rs`.
-2. **Export to script** — Generate a standalone `.ps1` script from the current selection (`winget install --id X` per package). Useful for sharing setups or running without the app.
-3. **Scheduled update checks** — Periodically check for upgrades and notify via Windows toast notifications (`winrt-toast` crate). Could be a "rerun to update" model (like Nanite) rather than a persistent background service.
-4. **Uninstall support** — Select installed packages to remove via `winget uninstall`. Start simple (just uninstall), potentially add leftover file/registry cleanup later — that's a much bigger scope.
-5. **Light theme** — Toggle between dark/light mode. Low priority but straightforward with the existing `Theme::custom()` setup.
+See `ROADMAP.md` for planned future features.
 
