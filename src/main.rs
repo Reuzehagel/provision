@@ -233,6 +233,11 @@ pub(crate) struct App {
     pub(crate) installed_map: HashMap<String, String>,
     pub(crate) installed_scan_done: bool,
     pub(crate) _installed_scan_handle: Option<task::Handle>,
+    // Uninstall state
+    pub(crate) uninstall_selected: HashSet<String>,
+    pub(crate) uninstall_queue: Vec<upgrade::InstalledPackage>,
+    pub(crate) uninstall: ProgressState,
+    pub(crate) size_scan_done: bool,
     // Update scan + upgrade state
     pub(crate) update_scan: UpdateScanState,
     pub(crate) upgrade_queue: Vec<UpgradeablePackage>,
@@ -285,6 +290,10 @@ impl App {
                 installed_map: HashMap::new(),
                 installed_scan_done: false,
                 _installed_scan_handle: Some(scan_handle.abort_on_drop()),
+                uninstall_selected: HashSet::new(),
+                uninstall_queue: Vec::new(),
+                uninstall: ProgressState::default(),
+                size_scan_done: false,
                 update_scan: UpdateScanState::default(),
                 upgrade_queue: Vec::new(),
                 upgrade: ProgressState::default(),
@@ -309,6 +318,9 @@ pub(crate) enum Screen {
     UpdateSelect,
     Updating,
     Settings,
+    UninstallSelect,
+    UninstallReview,
+    Uninstalling,
 }
 
 #[derive(Debug, Clone)]
@@ -354,6 +366,14 @@ pub(crate) enum Message {
     CheckForAppUpdate,
     OpenReleasePage,
     DismissUpdateBanner,
+    GoToUninstall,
+    ToggleUninstallPackage(String),
+    GoToUninstallReview,
+    StartUninstall,
+    CancelUninstall,
+    UninstallProgress(install::InstallProgress),
+    FinishUninstallAndReset,
+    SizeScanResult(Vec<(String, u64)>),
     KeyConfirm,
     KeyEscape,
     SelectAll,
@@ -402,6 +422,14 @@ impl App {
             Message::CancelUpgrade => self.handle_cancel_upgrade(),
             Message::UpgradeProgress(e) => self.handle_upgrade_progress(e),
             Message::FinishUpdateAndReset => self.handle_finish_update_and_reset(),
+            Message::GoToUninstall => self.handle_go_to_uninstall(),
+            Message::ToggleUninstallPackage(id) => self.handle_toggle_uninstall_package(id),
+            Message::GoToUninstallReview => self.handle_go_to_uninstall_review(),
+            Message::StartUninstall => self.handle_start_uninstall(),
+            Message::CancelUninstall => self.handle_cancel_uninstall(),
+            Message::UninstallProgress(event) => self.handle_uninstall_progress(event),
+            Message::FinishUninstallAndReset => self.handle_finish_uninstall_and_reset(),
+            Message::SizeScanResult(sizes) => self.handle_size_scan_result(sizes),
             Message::ToggleCategory(cat) => self.handle_toggle_category(cat),
             Message::SelectAll => self.handle_select_all(),
             Message::ExportSelection => self.handle_export_selection(),
@@ -455,6 +483,7 @@ impl App {
             Message::ClearCopyStatus => {
                 self.install.copy_status = false;
                 self.upgrade.copy_status = false;
+                self.uninstall.copy_status = false;
                 Task::none()
             }
             Message::SetInstallMode(mode) => {
@@ -534,6 +563,10 @@ impl App {
                 self.installed_packages = packages;
                 self.installed_scan_done = true;
                 self._installed_scan_handle = None;
+
+                // Kick off background size scan
+                let pkgs = self.installed_packages.clone();
+                return Task::perform(uninstall::scan_sizes(pkgs), Message::SizeScanResult);
             }
             upgrade::InstalledScanProgress::Failed { .. } => {
                 self.installed_scan_done = true;
@@ -574,6 +607,12 @@ impl App {
             }
             Screen::UpdateSelect => {
                 self.screen = Screen::ProfileSelect;
+            }
+            Screen::UninstallSelect => {
+                self.screen = Screen::ProfileSelect;
+            }
+            Screen::UninstallReview => {
+                self.screen = Screen::UninstallSelect;
             }
             _ => {
                 self.search.clear();
@@ -744,6 +783,101 @@ impl App {
         Task::none()
     }
 
+    // ── Uninstall flow ────────────────────────────────────────────
+
+    fn handle_go_to_uninstall(&mut self) -> Task<Message> {
+        self.search.clear();
+        self.uninstall_selected.clear();
+        self.screen = Screen::UninstallSelect;
+        Task::none()
+    }
+
+    fn handle_toggle_uninstall_package(&mut self, winget_id_lower: String) -> Task<Message> {
+        if !self.uninstall_selected.remove(&winget_id_lower) {
+            self.uninstall_selected.insert(winget_id_lower);
+        }
+        Task::none()
+    }
+
+    fn handle_go_to_uninstall_review(&mut self) -> Task<Message> {
+        self.screen = Screen::UninstallReview;
+        Task::none()
+    }
+
+    fn handle_start_uninstall(&mut self) -> Task<Message> {
+        let queue: Vec<upgrade::InstalledPackage> = self
+            .installed_packages
+            .iter()
+            .filter(|p| self.uninstall_selected.contains(&p.winget_id_lower))
+            .cloned()
+            .collect();
+
+        if queue.is_empty() {
+            return Task::none();
+        }
+
+        self.uninstall.start(queue.len());
+        self.uninstall_queue = queue.clone();
+        self.screen = Screen::Uninstalling;
+
+        let dry = self.dry_run;
+        let extra = self.settings.uninstall_args();
+        let (task, handle) = Task::run(
+            uninstall::uninstall_all(queue, dry, extra),
+            Message::UninstallProgress,
+        )
+        .abortable();
+
+        self.uninstall._handle = Some(handle.abort_on_drop());
+        task
+    }
+
+    fn handle_cancel_uninstall(&mut self) -> Task<Message> {
+        self.uninstall.cancel("Uninstall");
+        Task::none()
+    }
+
+    fn handle_uninstall_progress(&mut self, event: install::InstallProgress) -> Task<Message> {
+        let queue = &self.uninstall_queue;
+        self.uninstall.handle_event(&event, |i| {
+            let name = queue.get(i).map(|p| p.name.as_str()).unwrap_or("...");
+            format!("Removing {name}")
+        });
+        Task::none()
+    }
+
+    fn handle_finish_uninstall_and_reset(&mut self) -> Task<Message> {
+        self.search.clear();
+        self.uninstall_selected.clear();
+        self.uninstall_queue.clear();
+        self.uninstall = ProgressState::default();
+        self.screen = Screen::ProfileSelect;
+
+        // Re-scan installed packages
+        let (task, handle) = Task::run(
+            upgrade::scan_installed(self.dry_run),
+            Message::InstalledScanProgress,
+        )
+        .abortable();
+        self.installed_scan_done = false;
+        self._installed_scan_handle = Some(handle.abort_on_drop());
+        task
+    }
+
+    fn handle_size_scan_result(&mut self, sizes: Vec<(String, u64)>) -> Task<Message> {
+        for (id_lower, size) in sizes {
+            if let Some(pkg) = self
+                .installed_packages
+                .iter_mut()
+                .find(|p| p.winget_id_lower == id_lower)
+            {
+                pkg.size_bytes = Some(size);
+            }
+        }
+        self.size_scan_done = true;
+        Task::none()
+    }
+
     // ── Selection ────────────────────────────────────────────────
 
     fn handle_toggle_category(&mut self, cat: String) -> Task<Message> {
@@ -786,6 +920,19 @@ impl App {
                     .map(|p| p.winget_id.clone())
                     .collect();
                 toggle_set(&mut self.update_scan.selected, visible_ids);
+            }
+            Screen::UninstallSelect => {
+                let filtered: Vec<String> = self
+                    .installed_packages
+                    .iter()
+                    .filter(|p| {
+                        search_lower.is_empty()
+                            || p.name_lower.contains(&search_lower)
+                            || p.winget_id_lower.contains(&search_lower)
+                    })
+                    .map(|p| p.winget_id_lower.clone())
+                    .collect();
+                toggle_set(&mut self.uninstall_selected, filtered);
             }
             _ => {}
         }
@@ -844,6 +991,7 @@ impl App {
     fn handle_copy_log(&mut self, lines: Vec<String>) -> Task<Message> {
         let state = match self.screen {
             Screen::Updating => &self.upgrade,
+            Screen::Uninstalling => &self.uninstall,
             _ => &self.install,
         };
         let (done, failed, cancelled) = state.status_counts();
@@ -855,6 +1003,7 @@ impl App {
 
         match self.screen {
             Screen::Updating => self.upgrade.copy_status = true,
+            Screen::Uninstalling => self.uninstall.copy_status = true,
             _ => self.install.copy_status = true,
         }
 
@@ -917,6 +1066,11 @@ impl App {
                 self.handle_start_upgrade()
             }
             Screen::Updating if self.upgrade.done => self.handle_finish_update_and_reset(),
+            Screen::UninstallSelect if !self.uninstall_selected.is_empty() => {
+                self.handle_go_to_uninstall_review()
+            }
+            Screen::UninstallReview => self.handle_start_uninstall(),
+            Screen::Uninstalling if self.uninstall.done => self.handle_finish_uninstall_and_reset(),
             _ => Task::none(),
         }
     }
@@ -926,9 +1080,11 @@ impl App {
             Screen::PackageSelect | Screen::Review | Screen::UpdateSelect | Screen::Settings => {
                 self.handle_go_back()
             }
+            Screen::UninstallSelect | Screen::UninstallReview => self.handle_go_back(),
             Screen::Installing if !self.install.done => self.handle_cancel_install(),
             Screen::UpdateScanning if !self.update_scan.done => self.handle_cancel_update_scan(),
             Screen::Updating if !self.upgrade.done => self.handle_cancel_upgrade(),
+            Screen::Uninstalling if !self.uninstall.done => self.handle_cancel_uninstall(),
             _ => Task::none(),
         }
     }
@@ -943,6 +1099,9 @@ impl App {
             Screen::UpdateSelect => self.view_update_select(),
             Screen::Updating => self.view_updating(),
             Screen::Settings => self.view_settings(),
+            Screen::UninstallSelect => self.view_uninstall_select(),
+            Screen::UninstallReview => self.view_uninstall_review(),
+            Screen::Uninstalling => self.view_uninstalling(),
         }
     }
 
@@ -964,7 +1123,8 @@ impl App {
         let spinner_active = !self.installed_scan_done
             || matches!(self.screen, Screen::Installing if !self.install.done)
             || matches!(self.screen, Screen::UpdateScanning if !self.update_scan.done)
-            || matches!(self.screen, Screen::Updating if !self.upgrade.done);
+            || matches!(self.screen, Screen::Updating if !self.upgrade.done)
+            || matches!(self.screen, Screen::Uninstalling if !self.uninstall.done);
 
         if spinner_active {
             Subscription::batch([

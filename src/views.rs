@@ -908,6 +908,18 @@ impl App {
             .width(Length::Fill)
             .into()
     }
+
+    pub(crate) fn view_uninstall_select(&self) -> Element<'_, Message> {
+        text("Uninstall select").into()
+    }
+
+    pub(crate) fn view_uninstall_review(&self) -> Element<'_, Message> {
+        text("Uninstall review").into()
+    }
+
+    pub(crate) fn view_uninstalling(&self) -> Element<'_, Message> {
+        text("Uninstalling").into()
+    }
 }
 
 /// Back-button header: chevron-left icon button + heading text.
