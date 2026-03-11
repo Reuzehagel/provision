@@ -185,6 +185,27 @@ impl WingetSettings {
 
         args
     }
+
+    /// Build extra CLI flags for uninstall commands.
+    /// Only a subset of install flags apply to uninstall.
+    pub fn uninstall_args(&self) -> Vec<String> {
+        let mut args = Vec::new();
+
+        match self.install_mode {
+            InstallMode::Silent => args.push("--silent".into()),
+            InstallMode::Interactive => args.push("--interactive".into()),
+        }
+
+        if self.force {
+            args.push("--force".into());
+        }
+
+        if self.disable_interactivity {
+            args.push("--disable-interactivity".into());
+        }
+
+        args
+    }
 }
 
 // ── Persistence ─────────────────────────────────────────────────

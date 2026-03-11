@@ -13,9 +13,9 @@ use crate::upgrade::UpgradeablePackage;
 use lucide_icons::Icon;
 
 use crate::styles::{
-    LUCIDE_FONT, MUTED, MUTED_FG, STATUS_AMBER, STATUS_BLUE, STATUS_GREEN, STATUS_RED,
-    TERMINAL_TEXT, TEXT, browser_badge_style, cancel_button_style, card_style,
-    continue_button_style, divider_style, ghost_button_style, icon_box_style,
+    BORDER, CARD_BG, LUCIDE_FONT, MUTED, MUTED_FG, STATUS_AMBER, STATUS_BLUE, STATUS_GREEN,
+    STATUS_RED, TERMINAL_TEXT, TEXT, browser_badge_style, cancel_button_style, card_style,
+    continue_button_style, danger_button_style, divider_style, ghost_button_style, icon_box_style,
     installed_badge_style, package_checkbox_style, tab_style, terminal_box_style,
     update_banner_style, update_card_style, warning_badge_style,
 };
@@ -107,6 +107,39 @@ impl App {
             .width(Length::Fill)
             .style(update_card_style);
 
+        // Uninstall card — same pattern as update_card
+        let uninstall_icon = text(char::from(Icon::Trash2))
+            .size(15)
+            .font(LUCIDE_FONT)
+            .color(MUTED);
+        let uninstall_text = text("Uninstall packages").size(14).color(MUTED_FG);
+        let uninstall_chevron = text(char::from(Icon::ChevronRight))
+            .size(14)
+            .font(LUCIDE_FONT)
+            .color(MUTED);
+
+        let uninstall_content = row![
+            uninstall_icon,
+            uninstall_text,
+            iced::widget::Space::new().width(Length::Fill),
+            uninstall_chevron,
+        ]
+        .spacing(12)
+        .align_y(iced::Alignment::Center)
+        .padding([14, 16])
+        .width(Length::Fill);
+
+        let uninstall_card = if self.installed_scan_done && !self.installed_packages.is_empty() {
+            button(uninstall_content)
+                .on_press(Message::GoToUninstall)
+                .width(Length::Fill)
+                .style(update_card_style)
+        } else {
+            button(uninstall_content)
+                .width(Length::Fill)
+                .style(update_card_style)
+        };
+
         // Settings row — same subtle card style
         let settings_icon = text(char::from(Icon::Settings))
             .size(15)
@@ -149,7 +182,7 @@ impl App {
 
         // Scan status
         let scan_status = if self.installed_scan_done {
-            let count = self.installed.len();
+            let count = self.installed_map.len();
             status_indicator(Icon::Check, format!("{count} packages detected"), MUTED)
         } else {
             spinner_indicator(
@@ -218,6 +251,7 @@ impl App {
 
         let content = content
             .push(update_card)
+            .push(uninstall_card)
             .push(settings_card)
             .push(status_row);
 
@@ -930,6 +964,310 @@ impl App {
             .height(Length::Fill)
             .width(Length::Fill)
             .into()
+    }
+
+    pub(crate) fn view_uninstall_select(&self) -> Element<'_, Message> {
+        let header = search_header("Uninstall packages", &self.search);
+
+        let search_lower = self.search.to_lowercase();
+
+        let mut filtered: Vec<&crate::upgrade::InstalledPackage> = self
+            .installed_packages
+            .iter()
+            .filter(|p| {
+                search_lower.is_empty()
+                    || p.name_lower.contains(&search_lower)
+                    || p.winget_id_lower.contains(&search_lower)
+            })
+            .collect();
+        filtered.sort_by(|a, b| a.name_lower.cmp(&b.name_lower));
+
+        let total = self.installed_packages.len();
+        let shown = filtered.len();
+        let subtitle = if shown < total {
+            text(format!("{shown} of {total} installed packages (filtered)"))
+                .size(13)
+                .color(MUTED)
+        } else {
+            text(format!("{total} installed packages"))
+                .size(13)
+                .color(MUTED)
+        };
+
+        // Column headers
+        let col_headers = row![
+            iced::widget::Space::new().width(38),
+            text("Name").size(11).color(MUTED).width(Length::Fill),
+            text("Version").size(11).color(MUTED).width(100),
+            text("Size").size(11).color(MUTED).width(80),
+            text("Package ID").size(11).color(MUTED).width(160),
+        ]
+        .spacing(8)
+        .align_y(iced::Alignment::Center)
+        .padding(padding::right(20));
+
+        // Package list
+        let mut pkg_list = column![].spacing(2).width(Length::Fill);
+
+        for pkg in &filtered {
+            let is_checked = self.uninstall_selected.contains(&pkg.winget_id_lower);
+            let id = pkg.winget_id_lower.clone();
+
+            let cb = checkbox(is_checked)
+                .on_toggle(move |_| Message::ToggleUninstallPackage(id.clone()))
+                .size(14)
+                .style(package_checkbox_style);
+
+            let pkg_row = row![
+                cb,
+                text(&pkg.name).size(13).width(Length::Fill),
+                text(&pkg.version).size(12).color(MUTED_FG).width(100),
+                text(format_size(pkg.size_bytes))
+                    .size(12)
+                    .color(MUTED_FG)
+                    .width(80),
+                text(&pkg.winget_id)
+                    .size(11)
+                    .font(iced::Font::MONOSPACE)
+                    .color(MUTED)
+                    .width(160),
+            ]
+            .spacing(8)
+            .align_y(iced::Alignment::Center)
+            .padding([6, 8]);
+
+            let row_el: Element<'_, Message> = if is_checked {
+                container(pkg_row)
+                    .style(|_: &_| container::Style {
+                        background: Some(iced::Background::Color(CARD_BG)),
+                        border: iced::Border {
+                            radius: 6.0.into(),
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    })
+                    .width(Length::Fill)
+                    .into()
+            } else {
+                container(pkg_row).width(Length::Fill).into()
+            };
+
+            pkg_list = pkg_list.push(row_el);
+        }
+
+        let scrollable_list = scrollable(pkg_list.padding(padding::right(20)))
+            .height(Length::Fill)
+            .width(Length::Fill);
+
+        // Footer
+        let selected_count = self.uninstall_selected.len();
+        let selected_size: u64 = self
+            .installed_packages
+            .iter()
+            .filter(|p| self.uninstall_selected.contains(&p.winget_id_lower))
+            .filter_map(|p| p.size_bytes)
+            .sum();
+        let footer_label = format!(
+            "{selected_count} selected \u{00b7} ~{}",
+            format_size(if selected_size > 0 {
+                Some(selected_size)
+            } else {
+                None
+            })
+        );
+        let footer_text = text(footer_label).size(13).color(MUTED);
+
+        let mut review_btn = button(text("Review uninstall").size(14))
+            .style(danger_button_style)
+            .padding([8, 20]);
+        if selected_count > 0 {
+            review_btn = review_btn.on_press(Message::GoToUninstallReview);
+        }
+
+        let footer = container(
+            row![
+                footer_text,
+                iced::widget::Space::new().width(Length::Fill),
+                review_btn,
+            ]
+            .align_y(iced::Alignment::Center),
+        )
+        .style(|_: &_| container::Style {
+            border: iced::Border {
+                color: BORDER,
+                width: 1.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .padding(padding::top(12));
+
+        let content = column![header, subtitle, col_headers, scrollable_list, footer]
+            .spacing(14)
+            .width(Length::Fill)
+            .height(Length::Fill);
+
+        container(content)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .padding(28)
+            .into()
+    }
+
+    pub(crate) fn view_uninstall_review(&self) -> Element<'_, Message> {
+        let header = back_header("Confirm uninstall");
+
+        // Gather selected packages
+        let queue: Vec<&crate::upgrade::InstalledPackage> = self
+            .installed_packages
+            .iter()
+            .filter(|p| self.uninstall_selected.contains(&p.winget_id_lower))
+            .collect();
+        let count = queue.len();
+
+        // Warning banner
+        let warn_icon = text(char::from(Icon::TriangleAlert))
+            .size(16)
+            .font(LUCIDE_FONT)
+            .color(STATUS_AMBER);
+        let warn_title = text("This action cannot be undone").size(14).color(TEXT);
+        let warn_body = text(
+            "Selected packages will be permanently removed from this system. \
+             Application data may also be deleted.",
+        )
+        .size(12)
+        .color(MUTED_FG);
+
+        let warn_banner = container(
+            row![
+                warn_icon,
+                column![warn_title, warn_body]
+                    .spacing(4)
+                    .width(Length::Fill),
+            ]
+            .spacing(12)
+            .align_y(iced::Alignment::Center)
+            .padding([14, 16]),
+        )
+        .style(|_: &_| container::Style {
+            background: Some(iced::Background::Color(iced::Color::from_rgb(
+                0x45 as f32 / 255.0,
+                0x1a as f32 / 255.0,
+                0x03 as f32 / 255.0,
+            ))),
+            border: iced::Border {
+                color: iced::Color::from_rgb(
+                    0x92 as f32 / 255.0,
+                    0x40 as f32 / 255.0,
+                    0x0e as f32 / 255.0,
+                ),
+                width: 1.0,
+                radius: 8.0.into(),
+            },
+            ..Default::default()
+        })
+        .width(Length::Fill);
+
+        // Summary
+        let total_size: u64 = queue.iter().filter_map(|p| p.size_bytes).sum();
+        let summary = text(format!(
+            "{count} packages to uninstall \u{00b7} Estimated ~{} will be freed",
+            format_size(if total_size > 0 {
+                Some(total_size)
+            } else {
+                None
+            })
+        ))
+        .size(13)
+        .color(MUTED);
+
+        // Package list
+        let mut pkg_list = column![].spacing(6).width(Length::Fill);
+
+        for pkg in &queue {
+            let x_icon = text(char::from(Icon::X))
+                .size(13)
+                .font(LUCIDE_FONT)
+                .color(STATUS_RED);
+            let name_text = text(&pkg.name).size(14);
+            let detail = text(format!(
+                "{} \u{00b7} {} \u{00b7} {}",
+                pkg.winget_id,
+                pkg.version,
+                format_size(pkg.size_bytes)
+            ))
+            .size(12)
+            .color(MUTED);
+
+            let pkg_row = row![
+                x_icon,
+                column![name_text, detail].spacing(2).width(Length::Fill),
+            ]
+            .spacing(10)
+            .align_y(iced::Alignment::Center)
+            .padding([6, 4]);
+
+            pkg_list = pkg_list.push(pkg_row);
+        }
+
+        let scrollable_list = scrollable(pkg_list.padding(padding::right(20)))
+            .height(Length::Fill)
+            .width(Length::Fill);
+
+        // Footer
+        let edit_btn = button(text("Edit").size(14))
+            .on_press(Message::GoBack)
+            .style(ghost_button_style)
+            .padding([8, 20]);
+        let uninstall_btn = button(text(format!("Uninstall {count} packages")).size(14))
+            .on_press(Message::StartUninstall)
+            .style(danger_button_style)
+            .padding([8, 20]);
+
+        let footer = row![
+            iced::widget::Space::new().width(Length::Fill),
+            edit_btn,
+            uninstall_btn,
+        ]
+        .spacing(8)
+        .align_y(iced::Alignment::Center);
+
+        let content = column![header, warn_banner, summary, scrollable_list, footer]
+            .spacing(14)
+            .width(Length::Fill)
+            .height(Length::Fill);
+
+        container(content)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .padding(28)
+            .into()
+    }
+
+    pub(crate) fn view_uninstalling(&self) -> Element<'_, Message> {
+        view_progress_screen(
+            &self.uninstall,
+            &ProgressLabels {
+                verb: "Uninstalling",
+                done_label: "Uninstall",
+                dry_run_warning: "No packages will actually be uninstalled",
+            },
+            self.uninstall_queue.iter().map(|p| p.name.as_str()),
+            self.dry_run,
+            Message::CancelUninstall,
+            Message::FinishUninstallAndReset,
+            self.spinner_frame,
+        )
+    }
+}
+
+fn format_size(bytes: Option<u64>) -> String {
+    match bytes {
+        None => "\u{2014}".into(), // em dash
+        Some(b) if b < 1024 => format!("{b} B"),
+        Some(b) if b < 1024 * 1024 => format!("{:.0} KB", b as f64 / 1024.0),
+        Some(b) if b < 1024 * 1024 * 1024 => format!("{:.0} MB", b as f64 / (1024.0 * 1024.0)),
+        Some(b) => format!("{:.1} GB", b as f64 / (1024.0 * 1024.0 * 1024.0)),
     }
 }
 

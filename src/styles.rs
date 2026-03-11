@@ -185,6 +185,39 @@ pub fn tab_style(_theme: &Theme, status: button::Status, active: bool) -> button
     }
 }
 
+/// Red-accent button for destructive actions (uninstall).
+pub fn danger_button_style(_theme: &Theme, status: button::Status) -> button::Style {
+    let (bg, text_color, border_color) = match status {
+        button::Status::Active => (STATUS_RED, TEXT, STATUS_RED),
+        button::Status::Hovered => (
+            Color::from_rgb(
+                0xdc as f32 / 255.0,
+                0x26 as f32 / 255.0,
+                0x26 as f32 / 255.0,
+            ),
+            TEXT,
+            Color::from_rgb(
+                0xdc as f32 / 255.0,
+                0x26 as f32 / 255.0,
+                0x26 as f32 / 255.0,
+            ),
+        ),
+        _ => (STATUS_RED, TEXT, STATUS_RED),
+    };
+
+    button::Style {
+        background: Some(Background::Color(bg)),
+        text_color,
+        border: Border {
+            color: border_color,
+            width: 1.0,
+            radius: 6.0.into(),
+        },
+        shadow: Shadow::default(),
+        snap: false,
+    }
+}
+
 // ── Card styles ───────────────────────────────────────────────────
 
 pub fn card_style(_theme: &Theme, status: button::Status, selected: bool) -> button::Style {
