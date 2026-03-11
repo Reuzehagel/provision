@@ -95,6 +95,7 @@ Screen flow is driven by `Screen` enum variants (`ProfileSelect`, `PackageSelect
 - Iced `Padding` does NOT support `[_; 4]` arrays — use `padding::left(n)`, `padding::top(n)`, etc. for directional padding
 - `checkbox(bool)` builder pattern — use `.label()` and `.on_toggle()`, no positional label arg
 - Scrollable content needs explicit `width(Length::Fill)` on inner column or it shrink-wraps
+- **Scrollbar overlap**: Inner rows of `scrollable` containers need `padding::right(20)` to prevent the scrollbar from clipping text
 - **No `horizontal_space()` in iced 0.14** — use `iced::widget::Space::new().width(Length::Fill)`
 - **`progress_bar().height()` is private** — don't try to set it
 - **Auto-scroll**: `scrollable(content).anchor_bottom()` keeps scrollable pinned to bottom

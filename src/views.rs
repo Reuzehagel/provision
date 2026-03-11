@@ -1174,7 +1174,7 @@ fn view_progress_screen<'a>(
             text(label).size(12).color(color),
         ]
         .spacing(8)
-        .padding([4, 0])
+        .padding(padding::top(4).bottom(4).right(20))
         .align_y(iced::Alignment::Center);
 
         pkg_list = pkg_list.push(pkg_row);
