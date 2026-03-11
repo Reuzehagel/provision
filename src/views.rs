@@ -13,8 +13,8 @@ use crate::upgrade::UpgradeablePackage;
 use lucide_icons::Icon;
 
 use crate::styles::{
-    BORDER, CARD_BG, LUCIDE_FONT, MUTED, MUTED_FG, STATUS_AMBER, STATUS_BLUE, STATUS_GREEN,
-    STATUS_RED, TERMINAL_TEXT, TEXT, browser_badge_style, cancel_button_style, card_style,
+    CARD_BG, LUCIDE_FONT, MUTED, MUTED_FG, STATUS_AMBER, STATUS_BLUE, STATUS_GREEN, STATUS_RED,
+    TERMINAL_TEXT, TEXT, browser_badge_style, cancel_button_style, card_style,
     continue_button_style, danger_button_style, divider_style, ghost_button_style, icon_box_style,
     installed_badge_style, package_checkbox_style, tab_style, terminal_box_style,
     update_banner_style, update_card_style, warning_badge_style,
@@ -994,9 +994,9 @@ impl App {
                 .color(MUTED)
         };
 
-        // Column headers
+        // Column headers — left padding accounts for checkbox width + row padding
         let col_headers = row![
-            iced::widget::Space::new().width(38),
+            iced::widget::Space::new().width(30),
             text("Name").size(11).color(MUTED).width(Length::Fill),
             text("Version").size(11).color(MUTED).width(100),
             text("Size").size(11).color(MUTED).width(80),
@@ -1004,7 +1004,7 @@ impl App {
         ]
         .spacing(8)
         .align_y(iced::Alignment::Center)
-        .padding(padding::right(20));
+        .padding(padding::left(8).right(28));
 
         // Package list
         let mut pkg_list = column![].spacing(2).width(Length::Fill);
@@ -1067,14 +1067,14 @@ impl App {
             .filter(|p| self.uninstall_selected.contains(&p.winget_id_lower))
             .filter_map(|p| p.size_bytes)
             .sum();
-        let footer_label = format!(
-            "{selected_count} selected \u{00b7} ~{}",
-            format_size(if selected_size > 0 {
-                Some(selected_size)
-            } else {
-                None
-            })
-        );
+        let footer_label = if selected_size > 0 {
+            format!(
+                "{selected_count} selected \u{00b7} ~{}",
+                format_size(Some(selected_size))
+            )
+        } else {
+            format!("{selected_count} selected")
+        };
         let footer_text = text(footer_label).size(13).color(MUTED);
 
         let mut review_btn = button(text("Review uninstall").size(14))
@@ -1084,23 +1084,12 @@ impl App {
             review_btn = review_btn.on_press(Message::GoToUninstallReview);
         }
 
-        let footer = container(
-            row![
-                footer_text,
-                iced::widget::Space::new().width(Length::Fill),
-                review_btn,
-            ]
-            .align_y(iced::Alignment::Center),
-        )
-        .style(|_: &_| container::Style {
-            border: iced::Border {
-                color: BORDER,
-                width: 1.0,
-                ..Default::default()
-            },
-            ..Default::default()
-        })
-        .padding(padding::top(12));
+        let footer = row![
+            footer_text,
+            iced::widget::Space::new().width(Length::Fill),
+            review_btn,
+        ]
+        .align_y(iced::Alignment::Center);
 
         let content = column![header, subtitle, col_headers, scrollable_list, footer]
             .spacing(14)
@@ -1170,16 +1159,15 @@ impl App {
 
         // Summary
         let total_size: u64 = queue.iter().filter_map(|p| p.size_bytes).sum();
-        let summary = text(format!(
-            "{count} packages to uninstall \u{00b7} Estimated ~{} will be freed",
-            format_size(if total_size > 0 {
-                Some(total_size)
-            } else {
-                None
-            })
-        ))
-        .size(13)
-        .color(MUTED);
+        let summary_label = if total_size > 0 {
+            format!(
+                "{count} packages to uninstall \u{00b7} Estimated ~{} will be freed",
+                format_size(Some(total_size))
+            )
+        } else {
+            format!("{count} packages to uninstall")
+        };
+        let summary = text(summary_label).size(13).color(MUTED);
 
         // Package list
         let mut pkg_list = column![].spacing(6).width(Length::Fill);
