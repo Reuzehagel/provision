@@ -4,6 +4,7 @@ mod profile;
 mod settings;
 mod styles;
 mod theme;
+mod uninstall;
 mod upgrade;
 mod version;
 mod views;
