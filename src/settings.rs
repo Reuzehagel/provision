@@ -147,14 +147,29 @@ impl Default for WingetSettings {
 }
 
 impl WingetSettings {
-    /// Build extra CLI flags for install/upgrade commands.
-    pub fn install_args(&self) -> Vec<String> {
+    /// Flags shared by install, upgrade, and uninstall.
+    fn common_args(&self) -> Vec<String> {
         let mut args = Vec::new();
 
         match self.install_mode {
             InstallMode::Silent => args.push("--silent".into()),
             InstallMode::Interactive => args.push("--interactive".into()),
         }
+
+        if self.force {
+            args.push("--force".into());
+        }
+
+        if self.disable_interactivity {
+            args.push("--disable-interactivity".into());
+        }
+
+        args
+    }
+
+    /// Build extra CLI flags for install/upgrade commands.
+    pub fn install_args(&self) -> Vec<String> {
+        let mut args = self.common_args();
 
         if let Some(scope) = &self.scope {
             args.push("--scope".into());
@@ -166,16 +181,8 @@ impl WingetSettings {
             args.push(arch.to_string());
         }
 
-        if self.force {
-            args.push("--force".into());
-        }
-
         if self.ignore_security_hash {
             args.push("--ignore-security-hash".into());
-        }
-
-        if self.disable_interactivity {
-            args.push("--disable-interactivity".into());
         }
 
         if !self.install_location.is_empty() {
@@ -189,22 +196,7 @@ impl WingetSettings {
     /// Build extra CLI flags for uninstall commands.
     /// Only a subset of install flags apply to uninstall.
     pub fn uninstall_args(&self) -> Vec<String> {
-        let mut args = Vec::new();
-
-        match self.install_mode {
-            InstallMode::Silent => args.push("--silent".into()),
-            InstallMode::Interactive => args.push("--interactive".into()),
-        }
-
-        if self.force {
-            args.push("--force".into());
-        }
-
-        if self.disable_interactivity {
-            args.push("--disable-interactivity".into());
-        }
-
-        args
+        self.common_args()
     }
 }
 

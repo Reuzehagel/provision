@@ -19,7 +19,7 @@ use crate::styles::{
     installed_badge_style, package_checkbox_style, tab_style, terminal_box_style,
     update_banner_style, update_card_style, warning_badge_style,
 };
-use crate::{App, Message, ProgressState};
+use crate::{App, LogBuffer, Message, ProgressState};
 
 impl App {
     pub(crate) fn view_profile_select(&self) -> Element<'_, Message> {
@@ -80,92 +80,21 @@ impl App {
             .width(Length::Fill)
             .height(1);
 
-        // Update row — subtle card
-        let update_icon = text(char::from(Icon::RefreshCw))
-            .size(15)
-            .font(LUCIDE_FONT)
-            .color(MUTED);
-        let update_text = text("Check for updates").size(14).color(MUTED_FG);
-        let chevron = text(char::from(Icon::ChevronRight))
-            .size(14)
-            .font(LUCIDE_FONT)
-            .color(MUTED);
+        // Action cards
+        let update_card = action_card(
+            Icon::RefreshCw,
+            "Check for updates",
+            Some(Message::StartUpdateScan),
+        );
 
-        let update_content = row![
-            update_icon,
-            update_text,
-            iced::widget::Space::new().width(Length::Fill),
-            chevron,
-        ]
-        .spacing(12)
-        .align_y(iced::Alignment::Center)
-        .padding([14, 16])
-        .width(Length::Fill);
-
-        let update_card = button(update_content)
-            .on_press(Message::StartUpdateScan)
-            .width(Length::Fill)
-            .style(update_card_style);
-
-        // Uninstall card — same pattern as update_card
-        let uninstall_icon = text(char::from(Icon::Trash2))
-            .size(15)
-            .font(LUCIDE_FONT)
-            .color(MUTED);
-        let uninstall_text = text("Uninstall packages").size(14).color(MUTED_FG);
-        let uninstall_chevron = text(char::from(Icon::ChevronRight))
-            .size(14)
-            .font(LUCIDE_FONT)
-            .color(MUTED);
-
-        let uninstall_content = row![
-            uninstall_icon,
-            uninstall_text,
-            iced::widget::Space::new().width(Length::Fill),
-            uninstall_chevron,
-        ]
-        .spacing(12)
-        .align_y(iced::Alignment::Center)
-        .padding([14, 16])
-        .width(Length::Fill);
-
-        let uninstall_card = if self.installed_scan_done && !self.installed_packages.is_empty() {
-            button(uninstall_content)
-                .on_press(Message::GoToUninstall)
-                .width(Length::Fill)
-                .style(update_card_style)
+        let uninstall_msg = if self.installed_scan_done && !self.installed_packages.is_empty() {
+            Some(Message::GoToUninstall)
         } else {
-            button(uninstall_content)
-                .width(Length::Fill)
-                .style(update_card_style)
+            None
         };
+        let uninstall_card = action_card(Icon::Trash2, "Uninstall packages", uninstall_msg);
 
-        // Settings row — same subtle card style
-        let settings_icon = text(char::from(Icon::Settings))
-            .size(15)
-            .font(LUCIDE_FONT)
-            .color(MUTED);
-        let settings_text = text("Settings").size(14).color(MUTED_FG);
-        let settings_chevron = text(char::from(Icon::ChevronRight))
-            .size(14)
-            .font(LUCIDE_FONT)
-            .color(MUTED);
-
-        let settings_content = row![
-            settings_icon,
-            settings_text,
-            iced::widget::Space::new().width(Length::Fill),
-            settings_chevron,
-        ]
-        .spacing(12)
-        .align_y(iced::Alignment::Center)
-        .padding([14, 16])
-        .width(Length::Fill);
-
-        let settings_card = button(settings_content)
-            .on_press(Message::OpenSettings)
-            .width(Length::Fill)
-            .style(update_card_style);
+        let settings_card = action_card(Icon::Settings, "Settings", Some(Message::OpenSettings));
 
         // Catalog source indicator
         let pkg_count = self.catalog.len();
@@ -267,20 +196,19 @@ impl App {
 
         let header = search_header(profile.title(), &self.search);
 
-        let search_lower = self.search.to_lowercase();
-
-        let categories = catalog::categories(&self.catalog);
+        let search_lower = self.search_lower.as_str();
+        let categories = &self.categories;
         let mut pkg_list = column![].spacing(18).width(Length::Fill);
 
-        for cat in &categories {
+        for cat in categories {
             let cat_packages: Vec<&Package> = self
                 .catalog
                 .iter()
                 .filter(|p| {
                     p.category == *cat
                         && (search_lower.is_empty()
-                            || p.name_lower.contains(&search_lower)
-                            || p.desc_lower.contains(&search_lower))
+                            || p.name_lower.contains(search_lower)
+                            || p.desc_lower.contains(search_lower))
                 })
                 .collect();
 
@@ -456,13 +384,13 @@ impl App {
         };
         let subtitle = text(subtitle_text).size(13).color(MUTED);
 
-        let categories = catalog::categories(&self.catalog);
+        let categories = &self.categories;
         let mut pkg_list = column![]
             .spacing(14)
             .width(Length::Fill)
             .padding(padding::right(20));
 
-        for cat in &categories {
+        for cat in categories {
             let cat_pkgs: Vec<&&Package> = queue.iter().filter(|p| p.category == *cat).collect();
             if cat_pkgs.is_empty() {
                 continue;
@@ -569,7 +497,7 @@ impl App {
             .width(Length::Fill)
             .height(Length::Fill);
 
-        if queue.iter().any(|p| p.id == "wsl") {
+        if queue.iter().any(|p| p.id == catalog::WSL_PACKAGE_ID) {
             content = content.push(status_indicator(
                 Icon::TriangleAlert,
                 "WSL installation may require a system restart to take effect.".into(),
@@ -638,7 +566,7 @@ impl App {
             .into()
         };
 
-        let log_box = terminal_log_box(&scan.log, &scan.live_line)
+        let log_box = terminal_log_box(&scan.log)
             .height(Length::Fill)
             .width(Length::Fill);
 
@@ -681,15 +609,15 @@ impl App {
 
         let header = search_header("Updates", &self.search);
 
-        let search_lower = self.search.to_lowercase();
+        let search_lower = self.search_lower.as_str();
 
         let filtered_packages: Vec<&UpgradeablePackage> = scan
             .packages
             .iter()
             .filter(|p| {
                 search_lower.is_empty()
-                    || p.name_lower.contains(&search_lower)
-                    || p.winget_id_lower.contains(&search_lower)
+                    || p.name_lower.contains(search_lower)
+                    || p.winget_id_lower.contains(search_lower)
             })
             .collect();
 
@@ -969,15 +897,15 @@ impl App {
     pub(crate) fn view_uninstall_select(&self) -> Element<'_, Message> {
         let header = search_header("Uninstall packages", &self.search);
 
-        let search_lower = self.search.to_lowercase();
+        let search_lower = self.search_lower.as_str();
 
         let mut filtered: Vec<&crate::upgrade::InstalledPackage> = self
             .installed_packages
             .iter()
             .filter(|p| {
                 search_lower.is_empty()
-                    || p.name_lower.contains(&search_lower)
-                    || p.winget_id_lower.contains(&search_lower)
+                    || p.name_lower.contains(search_lower)
+                    || p.winget_id_lower.contains(search_lower)
             })
             .collect();
         filtered.sort_by(|a, b| a.name_lower.cmp(&b.name_lower));
@@ -1330,14 +1258,9 @@ fn toggle_row<'a>(
 }
 
 /// Terminal log box: monospace text in a dark container, auto-scrolled to bottom.
-fn terminal_log_box<'a>(log: &[String], live_line: &str) -> iced::widget::Container<'a, Message> {
-    let mut terminal_text = log.join("\n");
-    if !live_line.is_empty() {
-        if !terminal_text.is_empty() {
-            terminal_text.push('\n');
-        }
-        terminal_text.push_str(live_line);
-    }
+/// Uses the `LogBuffer::joined()` cache to avoid re-joining lines every frame.
+fn terminal_log_box(log: &LogBuffer) -> iced::widget::Container<'_, Message> {
+    let terminal_text = log.joined().to_string();
 
     let terminal_content = column![
         text(terminal_text)
@@ -1369,7 +1292,7 @@ struct ProgressLabels {
 
 /// Shared layout for both the Installing and Updating screens.
 fn view_progress_screen<'a>(
-    state: &ProgressState,
+    state: &'a ProgressState,
     labels: &ProgressLabels,
     names: impl Iterator<Item = &'a str>,
     dry_run: bool,
@@ -1548,7 +1471,7 @@ fn view_progress_screen<'a>(
         .height(Length::FillPortion(3))
         .width(Length::Fill);
 
-    let log_box = terminal_log_box(&state.log, &state.live_line)
+    let log_box = terminal_log_box(&state.log)
         .height(Length::FillPortion(2))
         .width(Length::Fill);
 
@@ -1576,7 +1499,7 @@ fn view_progress_screen<'a>(
         .style(ghost_button_style)
         .padding([8, 16]);
         if !state.copy_status {
-            btn = btn.on_press(Message::CopyLog(state.log.clone()));
+            btn = btn.on_press(Message::CopyLog);
         }
         btn.into()
     } else {
@@ -1660,6 +1583,32 @@ fn package_row<'a>(pkg: &'a Package, app: &'a App) -> Element<'a, Message> {
     container(pkg_row).padding([4, 0]).into()
 }
 
+/// Action card: icon + label + chevron, used on the profile select screen.
+fn action_card(icon: Icon, label: &str, on_press: Option<Message>) -> Element<'_, Message> {
+    let content = row![
+        text(char::from(icon))
+            .size(15)
+            .font(LUCIDE_FONT)
+            .color(MUTED),
+        text(label).size(14).color(MUTED_FG),
+        iced::widget::Space::new().width(Length::Fill),
+        text(char::from(Icon::ChevronRight))
+            .size(14)
+            .font(LUCIDE_FONT)
+            .color(MUTED),
+    ]
+    .spacing(12)
+    .align_y(iced::Alignment::Center)
+    .padding([14, 16])
+    .width(Length::Fill);
+
+    let mut btn = button(content).width(Length::Fill).style(update_card_style);
+    if let Some(msg) = on_press {
+        btn = btn.on_press(msg);
+    }
+    btn.into()
+}
+
 /// Small icon + label row used for status indicators (e.g. catalog source, scan progress).
 fn status_indicator(icon: Icon, label: String, color: iced::Color) -> Element<'static, Message> {
     row![
@@ -1725,10 +1674,13 @@ fn parse_changelog(raw: &str) -> Vec<ChangelogLine> {
 }
 
 fn view_settings_changelog<'a>() -> Element<'a, Message> {
-    let lines = parse_changelog(CHANGELOG_RAW);
+    use std::sync::LazyLock;
+    static CHANGELOG: LazyLock<Vec<ChangelogLine>> =
+        LazyLock::new(|| parse_changelog(CHANGELOG_RAW));
+    let lines = &*CHANGELOG;
     let mut col = column![].spacing(4).width(Length::Fill);
 
-    for line in lines {
+    for line in lines.iter() {
         match line {
             ChangelogLine::Version(v) => {
                 col = col.push(container(text(v).size(16).color(TEXT)).padding(padding::top(8)));

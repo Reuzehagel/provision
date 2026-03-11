@@ -8,6 +8,9 @@ use crate::catalog::Package;
 
 pub(crate) type Sender = futures::channel::mpsc::Sender<InstallProgress>;
 
+/// `CREATE_NO_WINDOW` — prevents console windows flashing when spawning processes.
+pub(crate) const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 #[derive(Debug, Clone)]
 pub enum PackageStatus {
     Pending,
@@ -260,6 +263,69 @@ pub(crate) async fn read_stdout<T: Send>(
     Ok(())
 }
 
+/// A package-like item that can be passed to `run_winget_batch`.
+pub(crate) trait BatchItem: Send + Sync {
+    fn name(&self) -> &str;
+    fn winget_id(&self) -> &str;
+}
+
+/// Run a batch of winget commands (upgrade, uninstall, etc.) as a stream.
+/// `verb` is the winget subcommand (e.g. "upgrade", "uninstall").
+/// `base_args` are additional args after `--id <id> -e` (e.g. `--accept-package-agreements`).
+pub(crate) fn run_winget_batch(
+    items: Vec<impl BatchItem + 'static>,
+    verb: &'static str,
+    base_args: Vec<&'static str>,
+    dry_run: bool,
+    extra_args: Vec<String>,
+) -> impl futures::Stream<Item = InstallProgress> + Send {
+    stream::channel(100, move |mut sender: Sender| async move {
+        for (i, item) in items.iter().enumerate() {
+            let _ = sender.send(InstallProgress::Started { index: i }).await;
+
+            if dry_run {
+                let _ = sender
+                    .send(InstallProgress::Log {
+                        index: i,
+                        line: format!(
+                            "[DRY RUN] {} — winget {verb} --id {} -e",
+                            item.name(),
+                            item.winget_id()
+                        ),
+                    })
+                    .await;
+
+                tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                let _ = sender.send(InstallProgress::Succeeded { index: i }).await;
+                continue;
+            }
+
+            let mut args: Vec<String> = vec![
+                verb.into(),
+                "--id".into(),
+                item.winget_id().to_string(),
+                "-e".into(),
+            ];
+            for a in &base_args {
+                args.push((*a).into());
+            }
+            args.extend(extra_args.iter().cloned());
+
+            match run_command("winget", &args, i, &mut sender).await {
+                Ok(()) => {
+                    let _ = sender.send(InstallProgress::Succeeded { index: i }).await;
+                }
+                Err(e) => {
+                    let _ = sender
+                        .send(InstallProgress::Failed { index: i, error: e })
+                        .await;
+                }
+            }
+        }
+        let _ = sender.send(InstallProgress::Completed).await;
+    })
+}
+
 pub(crate) async fn run_command(
     program: &str,
     args: &[String],
@@ -270,7 +336,7 @@ pub(crate) async fn run_command(
         .args(args)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
-        .creation_flags(0x08000000) // CREATE_NO_WINDOW
+        .creation_flags(CREATE_NO_WINDOW)
         .spawn()
         .map_err(|e| format!("Failed to spawn: {e}"))?;
 

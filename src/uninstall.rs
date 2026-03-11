@@ -1,9 +1,7 @@
 use iced::futures;
-use iced::futures::SinkExt as _;
-use iced::stream;
 use windows_sys::Win32::System::Registry::HKEY;
 
-use crate::install::{self, InstallProgress, Sender};
+use crate::install::{self, InstallProgress};
 use crate::upgrade::InstalledPackage;
 
 pub fn uninstall_all(
@@ -11,48 +9,13 @@ pub fn uninstall_all(
     dry_run: bool,
     extra_args: Vec<String>,
 ) -> impl futures::Stream<Item = InstallProgress> + Send {
-    stream::channel(100, move |mut sender: Sender| async move {
-        for (i, pkg) in packages.iter().enumerate() {
-            let _ = sender.send(InstallProgress::Started { index: i }).await;
-
-            if dry_run {
-                let _ = sender
-                    .send(InstallProgress::Log {
-                        index: i,
-                        line: format!(
-                            "[DRY RUN] Would run: winget uninstall --id {} -e",
-                            pkg.winget_id
-                        ),
-                    })
-                    .await;
-
-                tokio::time::sleep(std::time::Duration::from_millis(150)).await;
-                let _ = sender.send(InstallProgress::Succeeded { index: i }).await;
-                continue;
-            }
-
-            let mut args: Vec<String> = vec![
-                "uninstall".into(),
-                "--id".into(),
-                pkg.winget_id.clone(),
-                "-e".into(),
-                "--accept-source-agreements".into(),
-            ];
-            args.extend(extra_args.iter().cloned());
-
-            match install::run_command("winget", &args, i, &mut sender).await {
-                Ok(()) => {
-                    let _ = sender.send(InstallProgress::Succeeded { index: i }).await;
-                }
-                Err(e) => {
-                    let _ = sender
-                        .send(InstallProgress::Failed { index: i, error: e })
-                        .await;
-                }
-            }
-        }
-        let _ = sender.send(InstallProgress::Completed).await;
-    })
+    install::run_winget_batch(
+        packages,
+        "uninstall",
+        vec!["--accept-source-agreements"],
+        dry_run,
+        extra_args,
+    )
 }
 
 /// Scan Windows registry for installed package sizes.

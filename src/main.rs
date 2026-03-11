@@ -10,6 +10,7 @@ mod upgrade;
 mod version;
 mod views;
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
 use std::time::{Duration, Instant};
@@ -25,6 +26,11 @@ pub(crate) const SPINNER_FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', 
 pub(crate) const SEARCH_INPUT_ID: &str = "search_input";
 
 impl App {
+    fn clear_search(&mut self) {
+        self.search.clear();
+        self.search_lower.clear();
+    }
+
     /// Check whether a package from the catalog is already installed.
     pub(crate) fn is_installed(&self, pkg: &Package) -> bool {
         pkg.winget_id_lower
@@ -99,27 +105,93 @@ fn main() -> iced::Result {
         .run()
 }
 
+const LOG_CAP: usize = 200;
+
+/// Capped log buffer shared by progress screens and the update-scan screen.
+/// Maintains a pre-joined `joined` cache to avoid re-joining 200 lines per frame.
+/// Uses `RefCell` for the cache so `joined()` works through `&self` (needed by Iced's `view`).
+pub(crate) struct LogBuffer {
+    pub(crate) lines: Vec<String>,
+    pub(crate) live_line: String,
+    /// Pre-joined text of `lines` + `live_line`, rebuilt lazily via `joined()`.
+    joined_cache: RefCell<String>,
+    dirty: std::cell::Cell<bool>,
+}
+
+impl Default for LogBuffer {
+    fn default() -> Self {
+        Self {
+            lines: Vec::new(),
+            live_line: String::new(),
+            joined_cache: RefCell::new(String::new()),
+            dirty: std::cell::Cell::new(false),
+        }
+    }
+}
+
+impl LogBuffer {
+    pub(crate) fn push(&mut self, line: String) {
+        self.lines.push(line);
+        self.live_line.clear();
+        self.dirty.set(true);
+        if self.lines.len() > LOG_CAP {
+            self.lines.drain(..self.lines.len() - LOG_CAP);
+        }
+    }
+
+    pub(crate) fn set_live(&mut self, line: String) {
+        self.dirty.set(true);
+        self.live_line = line;
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.lines.clear();
+        self.live_line.clear();
+        self.joined_cache.borrow_mut().clear();
+        self.dirty.set(false);
+    }
+
+    /// Return the full terminal text (lines + live_line), using a cache to
+    /// avoid re-joining every frame. Safe to call from `&self` (view methods).
+    pub(crate) fn joined(&self) -> std::cell::Ref<'_, String> {
+        if self.dirty.get() {
+            let mut cache = self.joined_cache.borrow_mut();
+            cache.clear();
+            for (i, line) in self.lines.iter().enumerate() {
+                if i > 0 {
+                    cache.push('\n');
+                }
+                cache.push_str(line);
+            }
+            if !self.live_line.is_empty() {
+                if !cache.is_empty() {
+                    cache.push('\n');
+                }
+                cache.push_str(&self.live_line);
+            }
+            self.dirty.set(false);
+        }
+        self.joined_cache.borrow()
+    }
+}
+
 /// Tracks progress for a running install or upgrade operation.
 #[derive(Default)]
 pub(crate) struct ProgressState {
     pub(crate) statuses: Vec<PackageStatus>,
     pub(crate) current: usize,
-    pub(crate) log: Vec<String>,
-    pub(crate) live_line: String,
+    pub(crate) log: LogBuffer,
     pub(crate) done: bool,
     pub(crate) copy_status: bool,
     pub(crate) started_at: Option<Instant>,
     pub(crate) _handle: Option<task::Handle>,
 }
 
-const LOG_CAP: usize = 200;
-
 impl ProgressState {
     fn start(&mut self, count: usize) {
         self.statuses = vec![PackageStatus::Pending; count];
         self.current = 0;
         self.log.clear();
-        self.live_line.clear();
         self.done = false;
         self.copy_status = false;
         self.started_at = Some(Instant::now());
@@ -127,47 +199,47 @@ impl ProgressState {
 
     fn handle_event(
         &mut self,
-        event: &install::InstallProgress,
+        event: install::InstallProgress,
         get_name: impl Fn(usize) -> String,
     ) {
         match event {
             install::InstallProgress::Started { index } => {
-                if let Some(s) = self.statuses.get_mut(*index) {
+                if let Some(s) = self.statuses.get_mut(index) {
                     *s = PackageStatus::Installing;
                 }
-                self.current = *index;
-                self.live_line.clear();
-                if *index > 0 {
+                self.current = index;
+                self.log.live_line.clear();
+                self.log.dirty.set(true);
+                if index > 0 {
                     self.log.push(String::new());
                 }
-                self.log.push(format!("--- {} ---", get_name(*index)));
+                self.log.push(format!("--- {} ---", get_name(index)));
             }
             install::InstallProgress::Log { line, .. } => {
-                self.log.push(line.clone());
-                self.live_line.clear();
-                if self.log.len() > LOG_CAP {
-                    self.log.drain(..self.log.len() - LOG_CAP);
-                }
+                self.log.push(line);
             }
             install::InstallProgress::Activity { line, .. } => {
-                self.live_line = line.clone();
+                self.log.set_live(line);
             }
             install::InstallProgress::Succeeded { index } => {
-                if let Some(s) = self.statuses.get_mut(*index) {
+                if let Some(s) = self.statuses.get_mut(index) {
                     *s = PackageStatus::Done;
                 }
-                self.live_line.clear();
+                self.log.live_line.clear();
+                self.log.dirty.set(true);
             }
             install::InstallProgress::Failed { index, error } => {
-                if let Some(s) = self.statuses.get_mut(*index) {
-                    *s = PackageStatus::Failed(error.clone());
+                if let Some(s) = self.statuses.get_mut(index) {
+                    *s = PackageStatus::Failed(error);
                 }
-                self.live_line.clear();
+                self.log.live_line.clear();
+                self.log.dirty.set(true);
             }
             install::InstallProgress::Completed => {
                 self.done = true;
                 self._handle = None;
-                self.live_line.clear();
+                self.log.live_line.clear();
+                self.log.dirty.set(true);
             }
         }
     }
@@ -181,7 +253,7 @@ impl ProgressState {
             }
         }
         self.done = true;
-        self.live_line.clear();
+        self.log.live_line.clear();
         self.log.push(String::new());
         self.log.push(format!("--- {label} cancelled ---"));
     }
@@ -196,21 +268,15 @@ impl ProgressState {
     }
 
     pub(crate) fn status_counts(&self) -> (usize, usize, usize) {
-        let done = self
-            .statuses
-            .iter()
-            .filter(|s| matches!(s, PackageStatus::Done))
-            .count();
-        let failed = self
-            .statuses
-            .iter()
-            .filter(|s| matches!(s, PackageStatus::Failed(_)))
-            .count();
-        let cancelled = self
-            .statuses
-            .iter()
-            .filter(|s| matches!(s, PackageStatus::Cancelled))
-            .count();
+        let (mut done, mut failed, mut cancelled) = (0, 0, 0);
+        for s in &self.statuses {
+            match s {
+                PackageStatus::Done => done += 1,
+                PackageStatus::Failed(_) => failed += 1,
+                PackageStatus::Cancelled => cancelled += 1,
+                _ => {}
+            }
+        }
         (done, failed, cancelled)
     }
 }
@@ -218,8 +284,7 @@ impl ProgressState {
 /// Tracks state for the update-scan flow: scanning, results, and selection.
 #[derive(Default)]
 pub(crate) struct UpdateScanState {
-    pub(crate) log: Vec<String>,
-    pub(crate) live_line: String,
+    pub(crate) log: LogBuffer,
     pub(crate) packages: Vec<UpgradeablePackage>,
     pub(crate) selected: HashSet<String>,
     pub(crate) done: bool,
@@ -233,8 +298,10 @@ pub(crate) struct App {
     pub(crate) screen: Screen,
     pub(crate) catalog: Vec<Package>,
     pub(crate) catalog_source: CatalogSource,
+    pub(crate) categories: Vec<String>,
     pub(crate) selected: HashSet<String>,
     pub(crate) search: String,
+    pub(crate) search_lower: String,
     pub(crate) settings: settings::WingetSettings,
     pub(crate) settings_tab: settings::SettingsTab,
     // Install state
@@ -288,15 +355,20 @@ impl App {
             )
         };
 
+        let catalog = catalog::load_catalog();
+        let categories = catalog::categories(&catalog);
+
         (
             Self {
                 dry_run,
                 selected_profile: None,
                 screen: Screen::default(),
-                catalog: catalog::load_catalog(),
+                catalog,
                 catalog_source: CatalogSource::Embedded,
+                categories,
                 selected: HashSet::new(),
                 search: String::new(),
+                search_lower: String::new(),
                 settings: settings::load_settings(),
                 settings_tab: settings::SettingsTab::default(),
                 install_queue: Vec::new(),
@@ -366,7 +438,7 @@ pub(crate) enum Message {
     ImportSelection,
     ImportCompleted(Result<HashSet<String>, String>),
     ClearSelectionStatus,
-    CopyLog(Vec<String>),
+    CopyLog,
     ClearCopyStatus,
     OpenSettings,
     SetSettingsTab(settings::SettingsTab),
@@ -453,7 +525,7 @@ impl App {
             Message::ExportCompleted(r) => self.handle_export_completed(r),
             Message::ImportSelection => self.handle_import_selection(),
             Message::ImportCompleted(r) => self.handle_import_completed(r),
-            Message::CopyLog(lines) => self.handle_copy_log(lines),
+            Message::CopyLog => self.handle_copy_log(),
             Message::VersionCheckCompleted(r) => self.handle_version_check_completed(r),
             Message::CheckForAppUpdate => self.handle_check_for_app_update(),
             Message::OpenReleasePage => self.handle_open_release_page(),
@@ -478,6 +550,7 @@ impl App {
                 Task::none()
             }
             Message::SearchChanged(v) => {
+                self.search_lower = v.to_lowercase();
                 self.search = v;
                 Task::none()
             }
@@ -559,6 +632,7 @@ impl App {
         result: Result<(Vec<Package>, CatalogSource), String>,
     ) -> Task<Message> {
         if let Ok((packages, source)) = result {
+            self.categories = catalog::categories(&packages);
             self.catalog = packages;
             self.catalog_source = source;
             let valid_ids: HashSet<&str> = self.catalog.iter().map(|p| p.id.as_str()).collect();
@@ -605,7 +679,7 @@ impl App {
             }
         }
         self.selected = selection;
-        self.search.clear();
+        self.clear_search();
         self.screen = Screen::PackageSelect;
         Task::none()
     }
@@ -633,7 +707,7 @@ impl App {
                 self.screen = Screen::UninstallSelect;
             }
             _ => {
-                self.search.clear();
+                self.clear_search();
                 self.screen = Screen::ProfileSelect;
             }
         }
@@ -643,7 +717,7 @@ impl App {
     fn handle_finish_and_reset(&mut self) -> Task<Message> {
         self.selected_profile = None;
         self.selected.clear();
-        self.search.clear();
+        self.clear_search();
         self.install_queue.clear();
         self.install = ProgressState::default();
         self.screen = Screen::ProfileSelect;
@@ -691,7 +765,7 @@ impl App {
 
     fn handle_install_progress(&mut self, event: install::InstallProgress) -> Task<Message> {
         let queue = &self.install_queue;
-        self.install.handle_event(&event, |i| {
+        self.install.handle_event(event, |i| {
             let name = queue.get(i).map(|p| p.name.as_str()).unwrap_or("...");
             format!("Installing {name}")
         });
@@ -702,7 +776,7 @@ impl App {
 
     fn handle_start_update_scan(&mut self) -> Task<Message> {
         self.update_scan = UpdateScanState::default();
-        self.search.clear();
+        self.clear_search();
         self.screen = Screen::UpdateScanning;
 
         let dry = self.dry_run;
@@ -726,20 +800,14 @@ impl App {
     fn handle_update_scan_progress(&mut self, event: upgrade::ScanProgress) -> Task<Message> {
         match event {
             upgrade::ScanProgress::Activity { line } => {
-                self.update_scan.live_line = line;
+                self.update_scan.log.set_live(line);
             }
             upgrade::ScanProgress::Log { line } => {
                 self.update_scan.log.push(line);
-                self.update_scan.live_line.clear();
-                if self.update_scan.log.len() > LOG_CAP {
-                    self.update_scan
-                        .log
-                        .drain(..self.update_scan.log.len() - LOG_CAP);
-                }
             }
             upgrade::ScanProgress::Completed { packages } => {
                 self.update_scan.done = true;
-                self.update_scan.live_line.clear();
+                self.update_scan.log.live_line.clear();
                 self.update_scan._handle = None;
                 if packages.is_empty() {
                     self.update_scan.packages = packages;
@@ -753,7 +821,7 @@ impl App {
             upgrade::ScanProgress::Failed { error } => {
                 self.update_scan.done = true;
                 self.update_scan.error = Some(error);
-                self.update_scan.live_line.clear();
+                self.update_scan.log.live_line.clear();
                 self.update_scan._handle = None;
             }
         }
@@ -794,7 +862,7 @@ impl App {
 
     fn handle_upgrade_progress(&mut self, event: install::InstallProgress) -> Task<Message> {
         let queue = &self.upgrade_queue;
-        self.upgrade.handle_event(&event, |i| {
+        self.upgrade.handle_event(event, |i| {
             let name = queue.get(i).map(|p| p.name.as_str()).unwrap_or("...");
             format!("Upgrading {name}")
         });
@@ -804,7 +872,7 @@ impl App {
     // ── Uninstall flow ────────────────────────────────────────────
 
     fn handle_go_to_uninstall(&mut self) -> Task<Message> {
-        self.search.clear();
+        self.clear_search();
         self.uninstall_selected.clear();
         self.screen = Screen::UninstallSelect;
         Task::none()
@@ -857,7 +925,7 @@ impl App {
 
     fn handle_uninstall_progress(&mut self, event: install::InstallProgress) -> Task<Message> {
         let queue = &self.uninstall_queue;
-        self.uninstall.handle_event(&event, |i| {
+        self.uninstall.handle_event(event, |i| {
             let name = queue.get(i).map(|p| p.name.as_str()).unwrap_or("...");
             format!("Removing {name}")
         });
@@ -865,7 +933,7 @@ impl App {
     }
 
     fn handle_finish_uninstall_and_reset(&mut self) -> Task<Message> {
-        self.search.clear();
+        self.clear_search();
         self.uninstall_selected.clear();
         self.uninstall_queue.clear();
         self.uninstall = ProgressState::default();
@@ -910,16 +978,14 @@ impl App {
     }
 
     fn handle_select_all(&mut self) -> Task<Message> {
-        let search_lower = self.search.to_lowercase();
+        let sl = self.search_lower.as_str();
         match self.screen {
             Screen::PackageSelect => {
                 let visible_ids: Vec<String> = self
                     .catalog
                     .iter()
                     .filter(|p| {
-                        search_lower.is_empty()
-                            || p.name_lower.contains(&search_lower)
-                            || p.desc_lower.contains(&search_lower)
+                        sl.is_empty() || p.name_lower.contains(sl) || p.desc_lower.contains(sl)
                     })
                     .map(|p| p.id.clone())
                     .collect();
@@ -931,9 +997,7 @@ impl App {
                     .packages
                     .iter()
                     .filter(|p| {
-                        search_lower.is_empty()
-                            || p.name_lower.contains(&search_lower)
-                            || p.winget_id_lower.contains(&search_lower)
+                        sl.is_empty() || p.name_lower.contains(sl) || p.winget_id_lower.contains(sl)
                     })
                     .map(|p| p.winget_id.clone())
                     .collect();
@@ -944,9 +1008,7 @@ impl App {
                     .installed_packages
                     .iter()
                     .filter(|p| {
-                        search_lower.is_empty()
-                            || p.name_lower.contains(&search_lower)
-                            || p.winget_id_lower.contains(&search_lower)
+                        sl.is_empty() || p.name_lower.contains(sl) || p.winget_id_lower.contains(sl)
                     })
                     .map(|p| p.winget_id_lower.clone())
                     .collect();
@@ -1006,24 +1068,19 @@ impl App {
         delayed_clear(Message::ClearSelectionStatus)
     }
 
-    fn handle_copy_log(&mut self, lines: Vec<String>) -> Task<Message> {
+    fn handle_copy_log(&mut self) -> Task<Message> {
         let state = match self.screen {
-            Screen::Updating => &self.upgrade,
-            Screen::Uninstalling => &self.uninstall,
-            _ => &self.install,
+            Screen::Updating => &mut self.upgrade,
+            Screen::Uninstalling => &mut self.uninstall,
+            _ => &mut self.install,
         };
         let (done, failed, cancelled) = state.status_counts();
         let mut header = format!("{done} succeeded, {failed} failed");
         if cancelled > 0 {
             header.push_str(&format!(", {cancelled} cancelled"));
         }
-        let text = format!("{header}\n\n{}", lines.join("\n"));
-
-        match self.screen {
-            Screen::Updating => self.upgrade.copy_status = true,
-            Screen::Uninstalling => self.uninstall.copy_status = true,
-            _ => self.install.copy_status = true,
-        }
+        let text = format!("{header}\n\n{}", state.log.lines.join("\n"));
+        state.copy_status = true;
 
         Task::batch([
             clipboard::write(text),
@@ -1062,7 +1119,7 @@ impl App {
                 use std::os::windows::process::CommandExt;
                 let _ = std::process::Command::new("cmd")
                     .args(["/c", "start", &url])
-                    .creation_flags(0x08000000)
+                    .creation_flags(install::CREATE_NO_WINDOW)
                     .spawn();
             }
         }

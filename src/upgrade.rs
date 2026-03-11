@@ -3,7 +3,63 @@ use iced::futures::SinkExt as _;
 use iced::stream;
 use tokio::process::Command;
 
-use crate::install::{self, InstallProgress, LineEvent, Sender};
+use crate::install::{self, BatchItem, InstallProgress, LineEvent};
+
+/// Events emitted by `run_winget_scan` for the caller to map.
+enum ScanEvent {
+    Activity(String),
+    Log(String),
+    Failed(String),
+}
+
+/// Shared helper: spawn a winget command, read stdout, collect log lines,
+/// and return them. Sends events through a single mapper callback.
+async fn run_winget_scan<T: Send>(
+    args: &[&str],
+    sender: &mut futures::channel::mpsc::Sender<T>,
+    map: impl Fn(ScanEvent) -> T,
+) -> Result<Vec<String>, ()> {
+    let child = Command::new("winget")
+        .args(args)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .creation_flags(install::CREATE_NO_WINDOW)
+        .spawn();
+
+    let mut child = match child {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = sender
+                .send(map(ScanEvent::Failed(format!(
+                    "Failed to spawn winget: {e}"
+                ))))
+                .await;
+            return Err(());
+        }
+    };
+
+    let mut all_lines: Vec<String> = Vec::new();
+
+    if let Some(stdout) = child.stdout.take() {
+        let all_lines = &mut all_lines;
+        let result = install::read_stdout(stdout, sender, |event| match event {
+            LineEvent::Log(line) => {
+                all_lines.push(line.clone());
+                map(ScanEvent::Log(line))
+            }
+            LineEvent::Activity(line) => map(ScanEvent::Activity(line)),
+        })
+        .await;
+
+        if let Err(e) = result {
+            let _ = sender.send(map(ScanEvent::Failed(e))).await;
+            return Err(());
+        }
+    }
+
+    let _ = child.wait().await;
+    Ok(all_lines)
+}
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)] // Fields used in upcoming uninstall screen
@@ -44,6 +100,24 @@ pub struct UpgradeablePackage {
     pub name_lower: String,
     /// Precomputed `winget_id.to_lowercase()` for search filtering.
     pub winget_id_lower: String,
+}
+
+impl BatchItem for UpgradeablePackage {
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn winget_id(&self) -> &str {
+        &self.winget_id
+    }
+}
+
+impl BatchItem for InstalledPackage {
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn winget_id(&self) -> &str {
+        &self.winget_id
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -121,47 +195,16 @@ pub fn scan_installed(dry_run: bool) -> impl futures::Stream<Item = InstalledSca
                 return;
             }
 
-            let child = Command::new("winget")
-                .args(["list"])
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::null())
-                .creation_flags(0x08000000)
-                .spawn();
-
-            let mut child = match child {
-                Ok(c) => c,
-                Err(e) => {
-                    let _ = sender
-                        .send(InstalledScanProgress::Failed {
-                            error: format!("Failed to spawn winget: {e}"),
-                        })
-                        .await;
-                    return;
+            let Ok(all_lines) = run_winget_scan(&["list"], &mut sender, |e| match e {
+                ScanEvent::Activity(line) | ScanEvent::Log(line) => {
+                    InstalledScanProgress::Activity { line }
                 }
+                ScanEvent::Failed(error) => InstalledScanProgress::Failed { error },
+            })
+            .await
+            else {
+                return;
             };
-
-            let mut all_lines: Vec<String> = Vec::new();
-
-            if let Some(stdout) = child.stdout.take() {
-                let all_lines = &mut all_lines;
-                let result = install::read_stdout(stdout, &mut sender, |event| match event {
-                    LineEvent::Log(line) => {
-                        all_lines.push(line.clone());
-                        InstalledScanProgress::Activity { line }
-                    }
-                    LineEvent::Activity(line) => InstalledScanProgress::Activity { line },
-                })
-                .await;
-
-                if let Err(e) = result {
-                    let _ = sender
-                        .send(InstalledScanProgress::Failed { error: e })
-                        .await;
-                    return;
-                }
-            }
-
-            let _ = child.wait().await;
 
             let packages = parse_list_table(&all_lines);
             let _ = sender
@@ -297,50 +340,20 @@ pub fn scan_upgrades(
                 return;
             }
 
-            let mut scan_args = vec!["upgrade"];
+            let mut scan_args: Vec<&str> = vec!["upgrade"];
             if include_unknown {
                 scan_args.push("--include-unknown");
             }
 
-            let child = Command::new("winget")
-                .args(&scan_args)
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::null())
-                .creation_flags(0x08000000)
-                .spawn();
-
-            let mut child = match child {
-                Ok(c) => c,
-                Err(e) => {
-                    let _ = sender
-                        .send(ScanProgress::Failed {
-                            error: format!("Failed to spawn winget: {e}"),
-                        })
-                        .await;
-                    return;
-                }
+            let Ok(all_lines) = run_winget_scan(&scan_args, &mut sender, |e| match e {
+                ScanEvent::Activity(line) => ScanProgress::Activity { line },
+                ScanEvent::Log(line) => ScanProgress::Log { line },
+                ScanEvent::Failed(error) => ScanProgress::Failed { error },
+            })
+            .await
+            else {
+                return;
             };
-
-            let mut all_lines: Vec<String> = Vec::new();
-
-            if let Some(stdout) = child.stdout.take() {
-                let all_lines = &mut all_lines;
-                let result = install::read_stdout(stdout, &mut sender, |event| match event {
-                    LineEvent::Log(line) => {
-                        all_lines.push(line.clone());
-                        ScanProgress::Log { line }
-                    }
-                    LineEvent::Activity(line) => ScanProgress::Activity { line },
-                })
-                .await;
-
-                if let Err(e) = result {
-                    let _ = sender.send(ScanProgress::Failed { error: e }).await;
-                    return;
-                }
-            }
-
-            let _ = child.wait().await;
 
             let packages = parse_upgrade_table(&all_lines);
             let _ = sender.send(ScanProgress::Completed { packages }).await;
@@ -419,6 +432,9 @@ pub fn parse_upgrade_table(lines: &[String]) -> Vec<UpgradeablePackage> {
 
 /// Find the first data row after the header, skipping any separator line (dashes).
 fn find_data_start(lines: &[String], header_idx: usize) -> usize {
+    if header_idx + 1 >= lines.len() {
+        return lines.len();
+    }
     let sep_offset = lines[header_idx + 1..].iter().position(|l| {
         l.starts_with("---") || l.starts_with("───") || l.chars().all(|c| c == '-' || c == ' ')
     });
@@ -464,47 +480,11 @@ pub fn upgrade_all(
     dry_run: bool,
     extra_args: Vec<String>,
 ) -> impl futures::Stream<Item = InstallProgress> + Send {
-    stream::channel(100, move |mut sender: Sender| async move {
-        for (i, pkg) in packages.iter().enumerate() {
-            let _ = sender.send(InstallProgress::Started { index: i }).await;
-
-            if dry_run {
-                let _ = sender
-                    .send(InstallProgress::Log {
-                        index: i,
-                        line: format!(
-                            "[DRY RUN] Would run: winget upgrade --id {} -e",
-                            pkg.winget_id
-                        ),
-                    })
-                    .await;
-
-                tokio::time::sleep(std::time::Duration::from_millis(150)).await;
-                let _ = sender.send(InstallProgress::Succeeded { index: i }).await;
-                continue;
-            }
-
-            let mut args: Vec<String> = vec![
-                "upgrade".into(),
-                "--id".into(),
-                pkg.winget_id.clone(),
-                "-e".into(),
-                "--accept-package-agreements".into(),
-                "--accept-source-agreements".into(),
-            ];
-            args.extend(extra_args.iter().cloned());
-
-            match install::run_command("winget", &args, i, &mut sender).await {
-                Ok(()) => {
-                    let _ = sender.send(InstallProgress::Succeeded { index: i }).await;
-                }
-                Err(e) => {
-                    let _ = sender
-                        .send(InstallProgress::Failed { index: i, error: e })
-                        .await;
-                }
-            }
-        }
-        let _ = sender.send(InstallProgress::Completed).await;
-    })
+    install::run_winget_batch(
+        packages,
+        "upgrade",
+        vec!["--accept-package-agreements", "--accept-source-agreements"],
+        dry_run,
+        extra_args,
+    )
 }

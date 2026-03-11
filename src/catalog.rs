@@ -74,6 +74,9 @@ pub fn load_catalog() -> Vec<Package> {
     parse_catalog_toml(raw).expect("embedded packages.toml should be valid")
 }
 
+/// Package ID for WSL — used to show restart warning on the review screen.
+pub const WSL_PACKAGE_ID: &str = "wsl";
+
 const REMOTE_URL: &str =
     "https://raw.githubusercontent.com/Reuzehagel/provision/main/packages.toml";
 pub(crate) const CACHE_MAX_AGE: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
