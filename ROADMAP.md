@@ -9,3 +9,4 @@ Potential future features, roughly ordered by impact-to-effort ratio:
 
 - **Post-install hooks UI** — Surface `post_install` steps as a checklist after install instead of running them silently.
 - **Light theme** — Toggle between dark/light mode. Low priority but straightforward with the existing `Theme::custom()` setup.
+- **Package categories** — Add more categories and allow filtering by them on the selection screen.
