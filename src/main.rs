@@ -331,6 +331,15 @@ pub(crate) struct App {
     pub(crate) system_info: sysinfo::SystemInfo,
     // Spinner animation
     pub(crate) spinner_frame: usize,
+    // Winget search state
+    pub(crate) winget_search_query: String,
+    pub(crate) winget_search_results: Vec<upgrade::SearchPackage>,
+    pub(crate) winget_search_selected: HashSet<String>,
+    pub(crate) winget_search_scanning: bool,
+    pub(crate) winget_search_error: Option<String>,
+    pub(crate) winget_search_queue: Vec<upgrade::SearchPackage>,
+    pub(crate) winget_search_install: ProgressState,
+    pub(crate) _winget_search_handle: Option<task::Handle>,
 }
 
 impl App {
@@ -389,6 +398,14 @@ impl App {
                 latest_release: None,
                 version_check_in_progress: !dry_run,
                 spinner_frame: 0,
+                winget_search_query: String::new(),
+                winget_search_results: Vec::new(),
+                winget_search_selected: HashSet::new(),
+                winget_search_scanning: false,
+                winget_search_error: None,
+                winget_search_queue: Vec::new(),
+                winget_search_install: ProgressState::default(),
+                _winget_search_handle: None,
             },
             Task::batch([scan_task, catalog_task, version_task]),
         )
@@ -409,6 +426,8 @@ pub(crate) enum Screen {
     UninstallSelect,
     UninstallReview,
     Uninstalling,
+    WingetSearch,
+    WingetSearchInstalling,
 }
 
 #[derive(Debug, Clone)]
@@ -462,6 +481,16 @@ pub(crate) enum Message {
     UninstallProgress(install::InstallProgress),
     FinishUninstallAndReset,
     SizeScanResult(Vec<(String, u64)>),
+    GoToWingetSearch,
+    WingetSearchQueryChanged(String),
+    StartWingetSearch,
+    WingetSearchProgress(upgrade::SearchProgress),
+    ToggleWingetSearchPackage(String),
+    StartWingetSearchInstall,
+    CancelWingetSearchInstall,
+    WingetSearchInstallProgress(install::InstallProgress),
+    FinishWingetSearchInstall,
+    SelectAllWingetSearch,
     KeyConfirm,
     KeyEscape,
     FocusSearch,
@@ -519,6 +548,26 @@ impl App {
             Message::UninstallProgress(event) => self.handle_uninstall_progress(event),
             Message::FinishUninstallAndReset => self.handle_finish_uninstall_and_reset(),
             Message::SizeScanResult(sizes) => self.handle_size_scan_result(sizes),
+            Message::GoToWingetSearch => self.handle_go_to_winget_search(),
+            Message::WingetSearchQueryChanged(v) => {
+                self.winget_search_query = v;
+                Task::none()
+            }
+            Message::StartWingetSearch => self.handle_start_winget_search(),
+            Message::WingetSearchProgress(e) => self.handle_winget_search_progress(e),
+            Message::ToggleWingetSearchPackage(id) => {
+                if !self.winget_search_selected.remove(&id) {
+                    self.winget_search_selected.insert(id);
+                }
+                Task::none()
+            }
+            Message::StartWingetSearchInstall => self.handle_start_winget_search_install(),
+            Message::CancelWingetSearchInstall => self.handle_cancel_winget_search_install(),
+            Message::WingetSearchInstallProgress(e) => {
+                self.handle_winget_search_install_progress(e)
+            }
+            Message::FinishWingetSearchInstall => self.handle_finish_winget_search_install(),
+            Message::SelectAllWingetSearch => self.handle_select_all_winget_search(),
             Message::ToggleCategory(cat) => self.handle_toggle_category(cat),
             Message::SelectAll => self.handle_select_all(),
             Message::ExportSelection => self.handle_export_selection(),
@@ -701,6 +750,10 @@ impl App {
                 self.screen = Screen::ProfileSelect;
             }
             Screen::UninstallSelect => {
+                self.screen = Screen::ProfileSelect;
+            }
+            Screen::WingetSearch => {
+                self._winget_search_handle = None;
                 self.screen = Screen::ProfileSelect;
             }
             Screen::UninstallReview => {
@@ -964,6 +1017,134 @@ impl App {
         Task::none()
     }
 
+    // ── Winget search flow ────────────────────────────────────
+
+    fn handle_go_to_winget_search(&mut self) -> Task<Message> {
+        self.winget_search_results.clear();
+        self.winget_search_selected.clear();
+        self.winget_search_error = None;
+        self.winget_search_scanning = false;
+        self._winget_search_handle = None;
+        self.screen = Screen::WingetSearch;
+        widget::operation::focus(widget::Id::new(SEARCH_INPUT_ID))
+    }
+
+    fn handle_start_winget_search(&mut self) -> Task<Message> {
+        let query = self.winget_search_query.trim().to_string();
+        if query.is_empty() {
+            return Task::none();
+        }
+
+        self.winget_search_results.clear();
+        self.winget_search_selected.clear();
+        self.winget_search_error = None;
+        self.winget_search_scanning = true;
+
+        let dry = self.dry_run;
+        let (task, handle) = Task::run(
+            upgrade::search_winget(query, dry),
+            Message::WingetSearchProgress,
+        )
+        .abortable();
+
+        self._winget_search_handle = Some(handle.abort_on_drop());
+        task
+    }
+
+    fn handle_winget_search_progress(
+        &mut self,
+        event: upgrade::SearchProgress,
+    ) -> Task<Message> {
+        match event {
+            upgrade::SearchProgress::Activity { .. } => {}
+            upgrade::SearchProgress::Completed { packages } => {
+                self.winget_search_results = packages;
+                self.winget_search_scanning = false;
+                self._winget_search_handle = None;
+            }
+            upgrade::SearchProgress::Failed { error } => {
+                self.winget_search_error = Some(error);
+                self.winget_search_scanning = false;
+                self._winget_search_handle = None;
+            }
+        }
+        Task::none()
+    }
+
+    fn handle_start_winget_search_install(&mut self) -> Task<Message> {
+        let queue: Vec<upgrade::SearchPackage> = self
+            .winget_search_results
+            .iter()
+            .filter(|p| self.winget_search_selected.contains(&p.winget_id))
+            .cloned()
+            .collect();
+
+        if queue.is_empty() {
+            return Task::none();
+        }
+
+        self.winget_search_install.start(queue.len());
+        self.winget_search_queue = queue.clone();
+        self.screen = Screen::WingetSearchInstalling;
+
+        let dry = self.dry_run;
+        let extra = self.settings.install_args();
+        let (task, handle) = Task::run(
+            upgrade::search_install_all(queue, dry, extra),
+            Message::WingetSearchInstallProgress,
+        )
+        .abortable();
+
+        self.winget_search_install._handle = Some(handle.abort_on_drop());
+        task
+    }
+
+    fn handle_cancel_winget_search_install(&mut self) -> Task<Message> {
+        self.winget_search_install.cancel("Installation");
+        Task::none()
+    }
+
+    fn handle_winget_search_install_progress(
+        &mut self,
+        event: install::InstallProgress,
+    ) -> Task<Message> {
+        let queue = &self.winget_search_queue;
+        self.winget_search_install.handle_event(event, |i| {
+            let name = queue.get(i).map(|p| p.name.as_str()).unwrap_or("...");
+            format!("Installing {name}")
+        });
+        Task::none()
+    }
+
+    fn handle_finish_winget_search_install(&mut self) -> Task<Message> {
+        self.winget_search_queue.clear();
+        self.winget_search_install = ProgressState::default();
+        self.winget_search_selected.clear();
+        self.screen = Screen::WingetSearch;
+
+        // Re-scan installed packages so installed_map stays current
+        let (scan_task, handle) = Task::run(
+            upgrade::scan_installed(self.dry_run),
+            Message::InstalledScanProgress,
+        )
+        .abortable();
+        self.installed_scan_done = false;
+        self._installed_scan_handle = Some(handle.abort_on_drop());
+
+        let focus_task = widget::operation::focus(widget::Id::new(SEARCH_INPUT_ID));
+        Task::batch([scan_task, focus_task])
+    }
+
+    fn handle_select_all_winget_search(&mut self) -> Task<Message> {
+        let all_ids: Vec<String> = self
+            .winget_search_results
+            .iter()
+            .map(|p| p.winget_id.clone())
+            .collect();
+        toggle_set(&mut self.winget_search_selected, all_ids);
+        Task::none()
+    }
+
     // ── Selection ────────────────────────────────────────────────
 
     fn handle_toggle_category(&mut self, cat: String) -> Task<Message> {
@@ -1013,6 +1194,9 @@ impl App {
                     .map(|p| p.winget_id_lower.clone())
                     .collect();
                 toggle_set(&mut self.uninstall_selected, filtered);
+            }
+            Screen::WingetSearch => {
+                return self.handle_select_all_winget_search();
             }
             _ => {}
         }
@@ -1072,6 +1256,7 @@ impl App {
         let state = match self.screen {
             Screen::Updating => &mut self.upgrade,
             Screen::Uninstalling => &mut self.uninstall,
+            Screen::WingetSearchInstalling => &mut self.winget_search_install,
             _ => &mut self.install,
         };
         let (done, failed, cancelled) = state.status_counts();
@@ -1146,6 +1331,19 @@ impl App {
             }
             Screen::UninstallReview => self.handle_start_uninstall(),
             Screen::Uninstalling if self.uninstall.done => self.handle_finish_uninstall_and_reset(),
+            Screen::WingetSearch
+                if !self.winget_search_scanning
+                    && !self.winget_search_query.trim().is_empty()
+                    && self.winget_search_results.is_empty() =>
+            {
+                self.handle_start_winget_search()
+            }
+            Screen::WingetSearch if !self.winget_search_selected.is_empty() => {
+                self.handle_start_winget_search_install()
+            }
+            Screen::WingetSearchInstalling if self.winget_search_install.done => {
+                self.handle_finish_winget_search_install()
+            }
             _ => Task::none(),
         }
     }
@@ -1156,6 +1354,13 @@ impl App {
                 self.handle_go_back()
             }
             Screen::UninstallSelect | Screen::UninstallReview => self.handle_go_back(),
+            Screen::WingetSearch => self.handle_go_back(),
+            Screen::WingetSearchInstalling if !self.winget_search_install.done => {
+                self.handle_cancel_winget_search_install()
+            }
+            Screen::WingetSearchInstalling if self.winget_search_install.done => {
+                self.handle_finish_winget_search_install()
+            }
             Screen::Installing if !self.install.done => self.handle_cancel_install(),
             Screen::UpdateScanning if !self.update_scan.done => self.handle_cancel_update_scan(),
             Screen::Updating if !self.upgrade.done => self.handle_cancel_upgrade(),
@@ -1166,7 +1371,7 @@ impl App {
 
     fn handle_focus_search(&self) -> Task<Message> {
         match self.screen {
-            Screen::PackageSelect | Screen::UpdateSelect | Screen::UninstallSelect => {
+            Screen::PackageSelect | Screen::UpdateSelect | Screen::UninstallSelect | Screen::WingetSearch => {
                 widget::operation::focus(widget::Id::new(SEARCH_INPUT_ID))
             }
             _ => Task::none(),
@@ -1186,6 +1391,8 @@ impl App {
             Screen::UninstallSelect => self.view_uninstall_select(),
             Screen::UninstallReview => self.view_uninstall_review(),
             Screen::Uninstalling => self.view_uninstalling(),
+            Screen::WingetSearch => self.view_winget_search(),
+            Screen::WingetSearchInstalling => self.view_winget_search_installing(),
         }
     }
 
@@ -1209,7 +1416,9 @@ impl App {
             || matches!(self.screen, Screen::Installing if !self.install.done)
             || matches!(self.screen, Screen::UpdateScanning if !self.update_scan.done)
             || matches!(self.screen, Screen::Updating if !self.upgrade.done)
-            || matches!(self.screen, Screen::Uninstalling if !self.uninstall.done);
+            || matches!(self.screen, Screen::Uninstalling if !self.uninstall.done)
+            || matches!(self.screen, Screen::WingetSearch if self.winget_search_scanning)
+            || matches!(self.screen, Screen::WingetSearchInstalling if !self.winget_search_install.done);
 
         if spinner_active {
             Subscription::batch([
