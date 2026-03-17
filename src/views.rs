@@ -1198,9 +1198,7 @@ impl App {
 
         let mut search_btn = button(
             row![
-                text(char::from(Icon::Search))
-                    .size(14)
-                    .font(LUCIDE_FONT),
+                text(char::from(Icon::Search)).size(14).font(LUCIDE_FONT),
                 text("Search").size(14),
             ]
             .spacing(6)
@@ -1279,10 +1277,7 @@ impl App {
 
                     let pkg_row = row![
                         badge,
-                        text(&pkg.name)
-                            .size(13)
-                            .color(MUTED)
-                            .width(Length::Fill),
+                        text(&pkg.name).size(13).color(MUTED).width(Length::Fill),
                         text(&pkg.version).size(12).color(MUTED).width(100),
                         text(&pkg.winget_id)
                             .size(11)
@@ -1296,24 +1291,18 @@ impl App {
 
                     pkg_list = pkg_list.push(container(pkg_row).width(Length::Fill));
                 } else {
-                    let is_checked =
-                        self.winget_search_selected.contains(&pkg.winget_id);
+                    let is_checked = self.winget_search_selected.contains(&pkg.winget_id);
                     let id = pkg.winget_id.clone();
 
                     let cb = checkbox(is_checked)
-                        .on_toggle(move |_| {
-                            Message::ToggleWingetSearchPackage(id.clone())
-                        })
+                        .on_toggle(move |_| Message::ToggleWingetSearchPackage(id.clone()))
                         .size(14)
                         .style(package_checkbox_style);
 
                     let pkg_row = row![
                         cb,
                         text(&pkg.name).size(13).width(Length::Fill),
-                        text(&pkg.version)
-                            .size(12)
-                            .color(MUTED_FG)
-                            .width(100),
+                        text(&pkg.version).size(12).color(MUTED_FG).width(100),
                         text(&pkg.winget_id)
                             .size(11)
                             .font(iced::Font::MONOSPACE)
@@ -1369,11 +1358,9 @@ impl App {
             select_all_btn = select_all_btn.on_press(Message::SelectAllWingetSearch);
         }
 
-        let mut install_btn = button(
-            text(format!("Install selected ({selected_count})")).size(14),
-        )
-        .style(continue_button_style)
-        .padding([8, 20]);
+        let mut install_btn = button(text(format!("Install selected ({selected_count})")).size(14))
+            .style(continue_button_style)
+            .padding([8, 20]);
         if selected_count > 0 {
             install_btn = install_btn.on_press(Message::StartWingetSearchInstall);
         }

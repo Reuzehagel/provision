@@ -125,7 +125,9 @@ pub struct SearchPackage {
     pub name: String,
     pub winget_id: String,
     pub version: String,
+    #[allow(dead_code)]
     pub source: String,
+    #[allow(dead_code)]
     pub name_lower: String,
     pub winget_id_lower: String,
 }
@@ -233,9 +235,7 @@ pub fn search_winget(
             };
 
             let packages = parse_search_table(&all_lines);
-            let _ = sender
-                .send(SearchProgress::Completed { packages })
-                .await;
+            let _ = sender.send(SearchProgress::Completed { packages }).await;
         },
     )
 }

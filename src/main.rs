@@ -1051,10 +1051,7 @@ impl App {
         task
     }
 
-    fn handle_winget_search_progress(
-        &mut self,
-        event: upgrade::SearchProgress,
-    ) -> Task<Message> {
+    fn handle_winget_search_progress(&mut self, event: upgrade::SearchProgress) -> Task<Message> {
         match event {
             upgrade::SearchProgress::Activity { .. } => {}
             upgrade::SearchProgress::Completed { packages } => {
@@ -1371,9 +1368,10 @@ impl App {
 
     fn handle_focus_search(&self) -> Task<Message> {
         match self.screen {
-            Screen::PackageSelect | Screen::UpdateSelect | Screen::UninstallSelect | Screen::WingetSearch => {
-                widget::operation::focus(widget::Id::new(SEARCH_INPUT_ID))
-            }
+            Screen::PackageSelect
+            | Screen::UpdateSelect
+            | Screen::UninstallSelect
+            | Screen::WingetSearch => widget::operation::focus(widget::Id::new(SEARCH_INPUT_ID)),
             _ => Task::none(),
         }
     }
