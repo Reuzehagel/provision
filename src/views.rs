@@ -178,9 +178,16 @@ impl App {
             content = content.push(banner);
         }
 
+        let search_card = action_card(
+            Icon::Search,
+            "Search winget",
+            Some(Message::GoToWingetSearch),
+        );
+
         let content = content
             .push(update_card)
             .push(uninstall_card)
+            .push(search_card)
             .push(settings_card)
             .push(status_row);
 
@@ -1172,6 +1179,238 @@ impl App {
             self.dry_run,
             Message::CancelUninstall,
             Message::FinishUninstallAndReset,
+            self.spinner_frame,
+        )
+    }
+
+    pub(crate) fn view_winget_search(&self) -> Element<'_, Message> {
+        // Header with back button
+        let header = back_header("Search Winget");
+
+        // Search input + button row
+        let search_field = text_input("Search winget packages...", &self.winget_search_query)
+            .id(iced::widget::Id::new(SEARCH_INPUT_ID))
+            .on_input(Message::WingetSearchQueryChanged)
+            .on_submit(Message::StartWingetSearch)
+            .padding(8)
+            .size(14)
+            .width(Length::Fill);
+
+        let mut search_btn = button(
+            row![
+                text(char::from(Icon::Search))
+                    .size(14)
+                    .font(LUCIDE_FONT),
+                text("Search").size(14),
+            ]
+            .spacing(6)
+            .align_y(iced::Alignment::Center),
+        )
+        .style(continue_button_style)
+        .padding([8, 16]);
+
+        if !self.winget_search_scanning && !self.winget_search_query.trim().is_empty() {
+            search_btn = search_btn.on_press(Message::StartWingetSearch);
+        }
+
+        let search_row = row![search_field, search_btn]
+            .spacing(8)
+            .align_y(iced::Alignment::Center);
+
+        // Results area
+        let results_content: Element<'_, Message> = if self.winget_search_scanning {
+            container(
+                column![spinner_indicator(
+                    self.spinner_frame,
+                    "Searching...".into(),
+                    MUTED,
+                )]
+                .align_x(iced::Alignment::Center)
+                .width(Length::Fill),
+            )
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into()
+        } else if let Some(ref error) = self.winget_search_error {
+            container(
+                column![
+                    text(char::from(Icon::CircleX))
+                        .size(24)
+                        .font(LUCIDE_FONT)
+                        .color(STATUS_RED),
+                    text(error).size(14).color(STATUS_RED),
+                ]
+                .spacing(8)
+                .align_x(iced::Alignment::Center)
+                .width(Length::Fill),
+            )
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into()
+        } else if self.winget_search_results.is_empty() {
+            let msg = if self.winget_search_query.is_empty() {
+                "Type a query and press Enter"
+            } else {
+                "No results found"
+            };
+            container(text(msg).size(14).color(MUTED))
+                .center_x(Length::Fill)
+                .center_y(Length::Fill)
+                .into()
+        } else {
+            // Results list
+            let col_headers = row![
+                iced::widget::Space::new().width(30),
+                text("Name").size(11).color(MUTED).width(Length::Fill),
+                text("Version").size(11).color(MUTED).width(100),
+                text("Package ID").size(11).color(MUTED).width(200),
+            ]
+            .spacing(8)
+            .align_y(iced::Alignment::Center)
+            .padding(padding::left(8).right(28));
+
+            let mut pkg_list = column![].spacing(2).width(Length::Fill);
+
+            for pkg in &self.winget_search_results {
+                let is_installed = self.installed_map.contains_key(&pkg.winget_id_lower);
+
+                if is_installed {
+                    let badge = text("installed").size(11).color(STATUS_GREEN);
+
+                    let pkg_row = row![
+                        badge,
+                        text(&pkg.name)
+                            .size(13)
+                            .color(MUTED)
+                            .width(Length::Fill),
+                        text(&pkg.version).size(12).color(MUTED).width(100),
+                        text(&pkg.winget_id)
+                            .size(11)
+                            .font(iced::Font::MONOSPACE)
+                            .color(MUTED)
+                            .width(200),
+                    ]
+                    .spacing(8)
+                    .align_y(iced::Alignment::Center)
+                    .padding([6, 8]);
+
+                    pkg_list = pkg_list.push(container(pkg_row).width(Length::Fill));
+                } else {
+                    let is_checked =
+                        self.winget_search_selected.contains(&pkg.winget_id);
+                    let id = pkg.winget_id.clone();
+
+                    let cb = checkbox(is_checked)
+                        .on_toggle(move |_| {
+                            Message::ToggleWingetSearchPackage(id.clone())
+                        })
+                        .size(14)
+                        .style(package_checkbox_style);
+
+                    let pkg_row = row![
+                        cb,
+                        text(&pkg.name).size(13).width(Length::Fill),
+                        text(&pkg.version)
+                            .size(12)
+                            .color(MUTED_FG)
+                            .width(100),
+                        text(&pkg.winget_id)
+                            .size(11)
+                            .font(iced::Font::MONOSPACE)
+                            .color(MUTED)
+                            .width(200),
+                    ]
+                    .spacing(8)
+                    .align_y(iced::Alignment::Center)
+                    .padding([6, 8]);
+
+                    let row_el: Element<'_, Message> = if is_checked {
+                        container(pkg_row)
+                            .style(|_: &_| container::Style {
+                                background: Some(iced::Background::Color(CARD_BG)),
+                                border: iced::Border {
+                                    radius: 6.0.into(),
+                                    ..Default::default()
+                                },
+                                ..Default::default()
+                            })
+                            .width(Length::Fill)
+                            .into()
+                    } else {
+                        container(pkg_row).width(Length::Fill).into()
+                    };
+
+                    pkg_list = pkg_list.push(row_el);
+                }
+            }
+
+            column![
+                col_headers,
+                scrollable(pkg_list.padding(padding::right(20)))
+                    .height(Length::Fill)
+                    .width(Length::Fill),
+            ]
+            .spacing(6)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
+        };
+
+        // Footer
+        let selected_count = self.winget_search_selected.len();
+        let footer_text = text(format!("{selected_count} selected"))
+            .size(13)
+            .color(MUTED);
+
+        let mut select_all_btn = button(text("Select all").size(13))
+            .style(ghost_button_style)
+            .padding([6, 12]);
+        if !self.winget_search_results.is_empty() {
+            select_all_btn = select_all_btn.on_press(Message::SelectAllWingetSearch);
+        }
+
+        let mut install_btn = button(
+            text(format!("Install selected ({selected_count})")).size(14),
+        )
+        .style(continue_button_style)
+        .padding([8, 20]);
+        if selected_count > 0 {
+            install_btn = install_btn.on_press(Message::StartWingetSearchInstall);
+        }
+
+        let footer = row![
+            footer_text,
+            iced::widget::Space::new().width(Length::Fill),
+            select_all_btn,
+            install_btn,
+        ]
+        .spacing(8)
+        .align_y(iced::Alignment::Center);
+
+        let content = column![header, search_row, results_content, footer]
+            .spacing(14)
+            .width(Length::Fill)
+            .height(Length::Fill);
+
+        container(content)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .padding(28)
+            .into()
+    }
+
+    pub(crate) fn view_winget_search_installing(&self) -> Element<'_, Message> {
+        view_progress_screen(
+            &self.winget_search_install,
+            &ProgressLabels {
+                verb: "Installing",
+                done_label: "Installation",
+                dry_run_warning: "No packages will actually be installed",
+            },
+            self.winget_search_queue.iter().map(|p| p.name.as_str()),
+            self.dry_run,
+            Message::CancelWingetSearchInstall,
+            Message::FinishWingetSearchInstall,
             self.spinner_frame,
         )
     }
