@@ -25,7 +25,7 @@ The client ID is a public value from a GitHub OAuth App registered for this proj
 
 ## Screen Flow
 
-Three new `Screen` variants:
+Four new `Screen` variants:
 
 ### `GitHubLogin`
 
@@ -53,11 +53,21 @@ Three new `Screen` variants:
 
 - Reuses `view_progress_screen` pattern with `ProgressState`
 - Shows clone progress for each repo in the queue sequentially
-- Cloning via `git clone <clone_url> <destination>` using `tokio::process::Command` with `CREATE_NO_WINDOW`
-- After each successful clone, scans repo root for bootstrap scripts
-- If bootstrap script(s) found: shows prompt "Run `bootstrap.ps1`?" with yes/skip buttons before proceeding to next repo
-- Bootstrap script runs via `tokio::process::Command` in the cloned directory
+- Cloning via `git clone <auth_url> <destination>` using `tokio::process::Command` with `CREATE_NO_WINDOW`
+- After all clones complete, scans each cloned repo for bootstrap scripts
+- If any bootstrap scripts are detected, transitions to `GitHubBootstrap` screen
 - Done button returns to repo list screen
+- Cancel aborts remaining clones and returns to repo list
+
+### `GitHubBootstrap` (post-clone)
+
+- Shown after cloning completes, only if bootstrap scripts were detected in any cloned repo
+- Lists each repo that has a detected script: repo name, script name, destination path
+- Each item has "Run" and "Skip" buttons
+- If a repo has multiple candidate scripts, show a pick list to choose which one
+- Clicking "Run" executes the script via `tokio::process::Command` in the repo directory and shows output in a terminal log box
+- After all repos are handled (run or skipped), a "Done" button returns to repo list
+- This is a separate screen (not mid-stream) — avoids pausing the clone stream for user input
 
 ## Data Model
 
@@ -98,7 +108,6 @@ pub enum DeviceFlowProgress {
         user_code: String,
         verification_uri: String,
     },
-    Polling,
     Authenticated {
         token: String,
     },
@@ -112,9 +121,15 @@ pub enum CloneProgress {
     Log { line: String },
     Activity { line: String },
     PackageDone { index: usize, success: bool },
-    BootstrapDetected { index: usize, script: String },
     AllDone,
 }
+
+pub struct BootstrapItem {
+    pub repo_name: String,
+    pub repo_path: PathBuf,
+    pub scripts: Vec<String>,  // detected script filenames
+}
+
 ```
 
 ## API Calls
@@ -131,7 +146,8 @@ Pagination: follow `Link` header `rel="next"` if present, up to a reasonable cap
 
 ## Cloning
 
-- Shell out to `git clone` via `tokio::process::Command` with `.creation_flags(CREATE_NO_WINDOW)`
+- Authenticate git via token-in-URL: rewrite `clone_url` from `https://github.com/user/repo.git` to `https://oauth2:<token>@github.com/user/repo.git` before passing to `git clone`. This avoids env var leakage and works for both public and private repos. The token is ephemeral (in-memory only) so URL exposure in process args is acceptable for a local desktop app.
+- Shell out to `git clone <auth_url> <destination>` via `tokio::process::Command` with `.creation_flags(CREATE_NO_WINDOW)`
 - Use `--progress` flag so git writes progress to stderr
 - Read stderr for progress lines, stdout for errors
 - Use `.stderr(Stdio::piped())` and read raw bytes (same pattern as winget process reading in `install.rs`)
@@ -166,11 +182,12 @@ GitHubSelectFolder(String)          // repo full_name
 GitHubFolderPicked(String, PathBuf) // repo full_name, destination
 GitHubRemoveFromQueue(String)       // repo full_name
 StartGitHubClone
-CancelGitHubClone
+CancelGitHubClone                   // aborts remaining clones, returns to repo list
 GitHubCloneProgress(CloneProgress)
-GitHubRunBootstrap(usize)           // clone index
-GitHubSkipBootstrap
-FinishGitHubClone
+FinishGitHubClone                   // transitions to GitHubBootstrap if scripts detected, else repo list
+GitHubRunBootstrap(usize)           // bootstrap item index — run the script
+GitHubSkipBootstrap(usize)          // bootstrap item index — skip it
+FinishGitHubBootstrap               // return to repo list
 ```
 
 ## Home Screen Entry
@@ -179,8 +196,8 @@ New `action_card` on `ProfileSelect` screen with `Icon::Github` (from lucide-ico
 
 ## Dependencies
 
-- `open` crate — for opening the verification URL in the default browser. Lightweight, no heavy deps.
-- No new major dependencies. `reqwest`, `tokio`, `serde_json`, `rfd` are already in use.
+- **Add `open` crate** to `Cargo.toml` — for opening the verification URL in the default browser. Lightweight, no heavy deps.
+- No other new dependencies. `reqwest`, `tokio`, `serde_json`, `rfd` are already in use.
 
 ## Out of Scope
 
