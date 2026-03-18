@@ -5,6 +5,11 @@ use iced::{Background, Border, Color, Font, Shadow, Theme};
 pub const LUCIDE_FONT: Font = Font::with_name("lucide");
 
 // ── Zinc neutral palette ──────────────────────────────────────────
+pub const BG: Color = Color::from_rgb(
+    0x09 as f32 / 255.0,
+    0x09 as f32 / 255.0,
+    0x0b as f32 / 255.0,
+); // zinc-950 — app background
 pub const TEXT: Color = Color::from_rgb(
     0xfa as f32 / 255.0,
     0xfa as f32 / 255.0,
@@ -63,6 +68,12 @@ pub const STATUS_AMBER: Color = Color::from_rgb(
     0x9e as f32 / 255.0,
     0x0b as f32 / 255.0,
 ); // amber-500
+pub const REPOS_PURPLE: Color = Color::from_rgb(0.66, 0.33, 0.97);
+
+/// Returns a color at 10% opacity, for tinted icon circle backgrounds.
+pub fn tinted_icon_bg(color: Color) -> Color {
+    Color::from_rgba(color.r, color.g, color.b, 0.1)
+}
 
 const PRIMARY_HOVER: Color = Color::from_rgb(
     0x25 as f32 / 255.0,
@@ -387,6 +398,96 @@ pub fn divider_style(_theme: &Theme) -> container::Style {
     container::Style {
         background: Some(iced::Background::Color(BORDER)),
         ..Default::default()
+    }
+}
+
+pub fn hero_card_style(_theme: &Theme) -> container::Style {
+    use iced::Radians;
+    use iced::gradient::{self, Linear};
+
+    let gradient = Linear::new(Radians(135.0_f32.to_radians()))
+        .add_stop(0.0, Color::from_rgb(0.12, 0.16, 0.24))
+        .add_stop(1.0, CARD_BG);
+
+    container::Style {
+        background: Some(Background::Gradient(gradient::Gradient::Linear(gradient))),
+        border: Border {
+            color: BORDER,
+            width: 1.0,
+            radius: 8.0.into(),
+        },
+        ..Default::default()
+    }
+}
+
+pub fn hero_profile_button_style(_theme: &Theme, status: button::Status) -> button::Style {
+    let bg = match status {
+        button::Status::Hovered => Color::from_rgba(1.0, 1.0, 1.0, 0.12),
+        button::Status::Pressed => Color::from_rgba(1.0, 1.0, 1.0, 0.15),
+        _ => Color::from_rgba(1.0, 1.0, 1.0, 0.06),
+    };
+
+    button::Style {
+        background: Some(Background::Color(bg)),
+        text_color: TEXT,
+        border: Border {
+            color: BORDER_FOCUS,
+            width: 1.0,
+            radius: 6.0.into(),
+        },
+        shadow: Shadow::default(),
+        snap: false,
+    }
+}
+
+pub fn scan_button_style(_theme: &Theme, status: button::Status) -> button::Style {
+    let bg = match status {
+        button::Status::Hovered => Color::from_rgb(
+            0x0d as f32 / 255.0,
+            0x9e as f32 / 255.0,
+            0x6f as f32 / 255.0,
+        ),
+        button::Status::Pressed => Color::from_rgb(
+            0x0a as f32 / 255.0,
+            0x84 as f32 / 255.0,
+            0x5d as f32 / 255.0,
+        ),
+        _ => STATUS_GREEN,
+    };
+
+    button::Style {
+        background: Some(Background::Color(bg)),
+        text_color: BG,
+        border: Border {
+            color: Color::TRANSPARENT,
+            width: 0.0,
+            radius: 6.0.into(),
+        },
+        shadow: Shadow::default(),
+        snap: false,
+    }
+}
+
+pub fn tool_tile_style(_theme: &Theme, status: button::Status) -> button::Style {
+    let bg = match status {
+        button::Status::Hovered => CARD_HOVER,
+        _ => CARD_BG,
+    };
+    let border_color = match status {
+        button::Status::Hovered => BORDER_FOCUS,
+        _ => BORDER,
+    };
+
+    button::Style {
+        background: Some(Background::Color(bg)),
+        text_color: TEXT,
+        border: Border {
+            color: border_color,
+            width: 1.0,
+            radius: 8.0.into(),
+        },
+        shadow: Shadow::default(),
+        snap: false,
     }
 }
 
