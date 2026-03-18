@@ -68,7 +68,11 @@ pub const STATUS_AMBER: Color = Color::from_rgb(
     0x9e as f32 / 255.0,
     0x0b as f32 / 255.0,
 ); // amber-500
-pub const REPOS_PURPLE: Color = Color::from_rgb(0.66, 0.33, 0.97);
+pub const REPOS_PURPLE: Color = Color::from_rgb(
+    0xa8 as f32 / 255.0,
+    0x55 as f32 / 255.0,
+    0xf7 as f32 / 255.0,
+); // violet-500
 
 /// Returns a color at 10% opacity, for tinted icon circle backgrounds.
 pub fn tinted_icon_bg(color: Color) -> Color {
@@ -256,6 +260,18 @@ pub fn update_banner_style(_theme: &Theme, status: button::Status) -> button::St
 }
 
 // ── Container styles ──────────────────────────────────────────────
+
+pub fn card_container_style(_theme: &Theme) -> container::Style {
+    container::Style {
+        background: Some(Background::Color(CARD_BG)),
+        border: Border {
+            color: BORDER,
+            width: 1.0,
+            radius: 8.0.into(),
+        },
+        ..Default::default()
+    }
+}
 
 pub fn terminal_box_style(_theme: &Theme) -> container::Style {
     container::Style {

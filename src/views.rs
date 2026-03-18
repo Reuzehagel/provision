@@ -16,10 +16,10 @@ use crate::github::BootstrapStatus;
 use crate::styles::{
     BORDER, CARD_BG, LUCIDE_FONT, MUTED, MUTED_FG, REPOS_PURPLE, STATUS_AMBER, STATUS_BLUE,
     STATUS_GREEN, STATUS_RED, TERMINAL_TEXT, TEXT, browser_badge_style, cancel_button_style,
-    continue_button_style, danger_button_style, ghost_button_style, hero_card_style,
-    hero_profile_button_style, installed_badge_style, package_checkbox_style, scan_button_style,
-    tab_style, terminal_box_style, tinted_icon_bg, tool_tile_style, update_banner_style,
-    warning_badge_style,
+    card_container_style, continue_button_style, danger_button_style, ghost_button_style,
+    hero_card_style, hero_profile_button_style, installed_badge_style, package_checkbox_style,
+    scan_button_style, tab_style, terminal_box_style, tinted_icon_bg, tool_tile_style,
+    update_banner_style, warning_badge_style,
 };
 use crate::{App, LogBuffer, Message, ProgressState};
 
@@ -93,7 +93,7 @@ impl App {
 
         let count_display: Element<'_, Message> = if scan_done {
             if update_count > 0 {
-                text(format!("{update_count}"))
+                text(update_count.to_string())
                     .size(28)
                     .color(STATUS_GREEN)
                     .into()
@@ -148,15 +148,7 @@ impl App {
         )
         .padding(16)
         .width(Length::Fill)
-        .style(|_theme: &Theme| container::Style {
-            background: Some(iced::Background::Color(CARD_BG)),
-            border: iced::Border {
-                color: BORDER,
-                width: 1.0,
-                radius: 8.0.into(),
-            },
-            ..Default::default()
-        });
+        .style(card_container_style);
 
         // ── Section 3: Tool Tiles ───────────────────────────────
         let uninstall_msg = if self.installed_scan_done && !self.installed_packages.is_empty() {
@@ -184,15 +176,14 @@ impl App {
             .width(Length::Fill);
 
         // ── Footer ──────────────────────────────────────────────
-        let pkg_count = self.catalog.len();
         let catalog_color = if self.catalog_source == CatalogSource::Remote {
             STATUS_GREEN
         } else {
             MUTED
         };
         let catalog_label = match self.catalog_source.label_suffix() {
-            Some(suffix) => format!("{pkg_count} packages ({suffix})"),
-            None => format!("{pkg_count} packages"),
+            Some(suffix) => format!("{catalog_count} packages ({suffix})"),
+            None => format!("{catalog_count} packages"),
         };
         let catalog_status = status_indicator(Icon::Package, catalog_label, catalog_color);
 
@@ -2299,6 +2290,7 @@ fn tool_tile<'a>(
     color: iced::Color,
     on_press: Option<Message>,
 ) -> Element<'a, Message> {
+    let bg_color = tinted_icon_bg(color);
     let icon_bg = container(
         text(char::from(icon))
             .size(14)
@@ -2310,7 +2302,7 @@ fn tool_tile<'a>(
     .center_x(32)
     .center_y(32)
     .style(move |_theme: &Theme| container::Style {
-        background: Some(iced::Background::Color(tinted_icon_bg(color))),
+        background: Some(iced::Background::Color(bg_color)),
         border: iced::Border {
             radius: 8.0.into(),
             ..Default::default()
