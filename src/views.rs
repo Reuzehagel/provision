@@ -185,10 +185,13 @@ impl App {
             Some(Message::GoToWingetSearch),
         );
 
+        let github_card = action_card(Icon::Github, "Clone repos", Some(Message::GoToGitHubLogin));
+
         let content = content
             .push(update_card)
             .push(uninstall_card)
             .push(search_card)
+            .push(github_card)
             .push(settings_card)
             .push(status_row);
 
@@ -1538,9 +1541,7 @@ impl App {
             let mut repo_list = column![].spacing(2).width(Length::Fill);
 
             for repo in &self.github_repos {
-                if !sl.is_empty()
-                    && !repo.name_lower.contains(sl)
-                    && !repo.desc_lower.contains(sl)
+                if !sl.is_empty() && !repo.name_lower.contains(sl) && !repo.desc_lower.contains(sl)
                 {
                     continue;
                 }
@@ -1621,12 +1622,10 @@ impl App {
 
             for item in &self.github_clone_queue {
                 let full_name = item.repo.full_name.clone();
-                let remove_btn = button(
-                    text(char::from(Icon::X)).size(12).font(LUCIDE_FONT),
-                )
-                .style(ghost_button_style)
-                .padding([2, 6])
-                .on_press(Message::GitHubRemoveFromQueue(full_name));
+                let remove_btn = button(text(char::from(Icon::X)).size(12).font(LUCIDE_FONT))
+                    .style(ghost_button_style)
+                    .padding([2, 6])
+                    .on_press(Message::GitHubRemoveFromQueue(full_name));
 
                 let queue_row = row![
                     text(&item.repo.name).size(13),
@@ -1659,11 +1658,8 @@ impl App {
             clone_btn = clone_btn.on_press(Message::StartGitHubClone);
         }
 
-        let footer = row![
-            iced::widget::Space::new().width(Length::Fill),
-            clone_btn,
-        ]
-        .align_y(iced::Alignment::Center);
+        let footer = row![iced::widget::Space::new().width(Length::Fill), clone_btn,]
+            .align_y(iced::Alignment::Center);
 
         let layout = column![header, search_field, results_content, queue_section, footer]
             .spacing(14)
@@ -1697,22 +1693,18 @@ impl App {
 
     pub(crate) fn view_github_bootstrap(&self) -> Element<'_, Message> {
         let header = text("Setup scripts detected").size(18);
-        let subtitle = text(
-            "These repos have bootstrap scripts that can set things up for you.",
-        )
-        .size(13)
-        .color(MUTED);
+        let subtitle = text("These repos have bootstrap scripts that can set things up for you.")
+            .size(13)
+            .color(MUTED);
 
         let mut list = column![].spacing(8).width(Length::Fill);
 
         for (idx, item) in self.github_bootstrap_items.iter().enumerate() {
             let status_indicator: Element<'_, Message> = match &item.status {
                 BootstrapStatus::Pending => iced::widget::Space::new().width(0).into(),
-                BootstrapStatus::Running => spinner_indicator(
-                    self.spinner_frame,
-                    "Running...".into(),
-                    STATUS_BLUE,
-                ),
+                BootstrapStatus::Running => {
+                    spinner_indicator(self.spinner_frame, "Running...".into(), STATUS_BLUE)
+                }
                 BootstrapStatus::Done => text(char::from(Icon::Check))
                     .size(14)
                     .font(LUCIDE_FONT)
@@ -1727,9 +1719,7 @@ impl App {
                     let script = item.scripts[0].clone();
                     let run_btn = button(
                         row![
-                            text(char::from(Icon::Play))
-                                .size(12)
-                                .font(LUCIDE_FONT),
+                            text(char::from(Icon::Play)).size(12).font(LUCIDE_FONT),
                             text(format!("Run {}", &item.scripts[0])).size(12),
                         ]
                         .spacing(6)
@@ -1813,10 +1803,7 @@ impl App {
             done_btn = done_btn.on_press(Message::FinishGitHubBootstrap);
         }
 
-        let footer = row![
-            iced::widget::Space::new().width(Length::Fill),
-            done_btn,
-        ];
+        let footer = row![iced::widget::Space::new().width(Length::Fill), done_btn,];
 
         let layout = column![header, subtitle, list, footer]
             .spacing(14)

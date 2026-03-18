@@ -1619,9 +1619,7 @@ impl App {
             Screen::GitHubRepos if !self.github_clone_queue.is_empty() => {
                 self.handle_start_github_clone()
             }
-            Screen::GitHubCloning if self.github_clone.done => {
-                self.handle_finish_github_clone()
-            }
+            Screen::GitHubCloning if self.github_clone.done => self.handle_finish_github_clone(),
             _ => Task::none(),
         }
     }
@@ -1644,12 +1642,8 @@ impl App {
             Screen::Updating if !self.upgrade.done => self.handle_cancel_upgrade(),
             Screen::Uninstalling if !self.uninstall.done => self.handle_cancel_uninstall(),
             Screen::GitHubLogin | Screen::GitHubRepos => self.handle_go_back(),
-            Screen::GitHubCloning if !self.github_clone.done => {
-                self.handle_cancel_github_clone()
-            }
-            Screen::GitHubCloning if self.github_clone.done => {
-                self.handle_finish_github_clone()
-            }
+            Screen::GitHubCloning if !self.github_clone.done => self.handle_cancel_github_clone(),
+            Screen::GitHubCloning if self.github_clone.done => self.handle_finish_github_clone(),
             Screen::GitHubBootstrap => {
                 self.github_bootstrap_items.clear();
                 self.screen = Screen::GitHubRepos;
@@ -1685,10 +1679,10 @@ impl App {
             Screen::Uninstalling => self.view_uninstalling(),
             Screen::WingetSearch => self.view_winget_search(),
             Screen::WingetSearchInstalling => self.view_winget_search_installing(),
-            Screen::GitHubLogin
-            | Screen::GitHubRepos
-            | Screen::GitHubCloning
-            | Screen::GitHubBootstrap => todo!("GitHub views not yet implemented"),
+            Screen::GitHubLogin => self.view_github_login(),
+            Screen::GitHubRepos => self.view_github_repos(),
+            Screen::GitHubCloning => self.view_github_cloning(),
+            Screen::GitHubBootstrap => self.view_github_bootstrap(),
         }
     }
 
