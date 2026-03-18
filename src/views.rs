@@ -937,7 +937,7 @@ impl App {
         let col_headers = row![
             iced::widget::Space::new().width(30),
             text("Name").size(11).color(MUTED).width(Length::Fill),
-            text("Version").size(11).color(MUTED).width(100),
+            text("Version").size(11).color(MUTED).width(130),
             text("Size").size(11).color(MUTED).width(80),
             text("Package ID").size(11).color(MUTED).width(160),
         ]
@@ -960,7 +960,7 @@ impl App {
             let pkg_row = row![
                 cb,
                 text(&pkg.name).size(13).width(Length::Fill),
-                text(&pkg.version).size(12).color(MUTED_FG).width(100),
+                text(&pkg.version).size(12).color(MUTED_FG).width(130),
                 text(format_size(pkg.size_bytes))
                     .size(12)
                     .color(MUTED_FG)

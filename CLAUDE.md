@@ -73,6 +73,7 @@ Iced (0.14) Elm-style architecture: **State → Message → Update → View**.
 - **`src/bin/sort_packages.rs`** — Utility binary (`just sort-packages`) that reads `packages.toml`, groups by category in a fixed display order, sorts alphabetically within each category, and rewrites the file.
 - **`packages.toml`** — Package catalog embedded in the binary at compile time. Each entry has `id`, `name`, `description`, `category`, `winget_id`, `profiles`, and optional `post_install`/`install_command`.
 - **`DESIGN.md`** — Design system reference (color tokens, spacing, component patterns).
+- **`CHANGELOG.md`** — Version history, displayed in the Settings screen (Changelog tab).
 
 Screen flow is driven by `Screen` enum variants (`ProfileSelect`, `PackageSelect`, `Review`, `Installing`, `UpdateScanning`, `UpdateSelect`, `Updating`, `UninstallSelect`, `UninstallReview`, `Uninstalling`, `Settings`). Each variant maps to a `view_*` method on `App`.
 
