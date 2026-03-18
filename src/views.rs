@@ -12,9 +12,10 @@ use crate::upgrade::UpgradeablePackage;
 use crate::{SEARCH_INPUT_ID, SPINNER_FRAMES};
 use lucide_icons::Icon;
 
+use crate::github::BootstrapStatus;
 use crate::styles::{
-    CARD_BG, LUCIDE_FONT, MUTED, MUTED_FG, STATUS_AMBER, STATUS_BLUE, STATUS_GREEN, STATUS_RED,
-    TERMINAL_TEXT, TEXT, browser_badge_style, cancel_button_style, card_style,
+    BORDER, CARD_BG, LUCIDE_FONT, MUTED, MUTED_FG, STATUS_AMBER, STATUS_BLUE, STATUS_GREEN,
+    STATUS_RED, TERMINAL_TEXT, TEXT, browser_badge_style, cancel_button_style, card_style,
     continue_button_style, danger_button_style, divider_style, ghost_button_style, icon_box_style,
     installed_badge_style, package_checkbox_style, tab_style, terminal_box_style,
     update_banner_style, update_card_style, warning_badge_style,
@@ -178,9 +179,19 @@ impl App {
             content = content.push(banner);
         }
 
+        let search_card = action_card(
+            Icon::Search,
+            "Search winget",
+            Some(Message::GoToWingetSearch),
+        );
+
+        let github_card = action_card(Icon::Github, "Clone repos", Some(Message::GoToGitHubLogin));
+
         let content = content
             .push(update_card)
             .push(uninstall_card)
+            .push(search_card)
+            .push(github_card)
             .push(settings_card)
             .push(status_row);
 
@@ -1174,6 +1185,636 @@ impl App {
             Message::FinishUninstallAndReset,
             self.spinner_frame,
         )
+    }
+
+    pub(crate) fn view_winget_search(&self) -> Element<'_, Message> {
+        // Header with back button
+        let header = back_header("Search Winget");
+
+        // Search input + button row
+        let search_field = text_input("Search winget packages...", &self.winget_search_query)
+            .id(iced::widget::Id::new(SEARCH_INPUT_ID))
+            .on_input(Message::WingetSearchQueryChanged)
+            .on_submit(Message::StartWingetSearch)
+            .padding(8)
+            .size(14)
+            .width(Length::Fill);
+
+        let mut search_btn = button(
+            row![
+                text(char::from(Icon::Search)).size(14).font(LUCIDE_FONT),
+                text("Search").size(14),
+            ]
+            .spacing(6)
+            .align_y(iced::Alignment::Center),
+        )
+        .style(continue_button_style)
+        .padding([8, 16]);
+
+        if !self.winget_search_scanning && !self.winget_search_query.trim().is_empty() {
+            search_btn = search_btn.on_press(Message::StartWingetSearch);
+        }
+
+        let search_row = row![search_field, search_btn]
+            .spacing(8)
+            .align_y(iced::Alignment::Center);
+
+        // Results area
+        let results_content: Element<'_, Message> = if self.winget_search_scanning {
+            container(
+                column![spinner_indicator(
+                    self.spinner_frame,
+                    "Searching...".into(),
+                    MUTED,
+                )]
+                .align_x(iced::Alignment::Center)
+                .width(Length::Fill),
+            )
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into()
+        } else if let Some(ref error) = self.winget_search_error {
+            container(
+                column![
+                    text(char::from(Icon::CircleX))
+                        .size(24)
+                        .font(LUCIDE_FONT)
+                        .color(STATUS_RED),
+                    text(error).size(14).color(STATUS_RED),
+                ]
+                .spacing(8)
+                .align_x(iced::Alignment::Center)
+                .width(Length::Fill),
+            )
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into()
+        } else if self.winget_search_results.is_empty() {
+            let msg = if self.winget_search_query.is_empty() {
+                "Type a query and press Enter"
+            } else {
+                "No results found"
+            };
+            container(text(msg).size(14).color(MUTED))
+                .center_x(Length::Fill)
+                .center_y(Length::Fill)
+                .into()
+        } else {
+            // Results list
+            let col_headers = row![
+                iced::widget::Space::new().width(30),
+                text("Name").size(11).color(MUTED).width(Length::Fill),
+                text("Version").size(11).color(MUTED).width(100),
+                text("Package ID").size(11).color(MUTED).width(200),
+            ]
+            .spacing(8)
+            .align_y(iced::Alignment::Center)
+            .padding(padding::left(8).right(28));
+
+            let mut pkg_list = column![].spacing(2).width(Length::Fill);
+
+            for pkg in &self.winget_search_results {
+                let is_installed = self.installed_map.contains_key(&pkg.winget_id_lower);
+
+                if is_installed {
+                    let badge = text("installed").size(11).color(STATUS_GREEN);
+
+                    let pkg_row = row![
+                        badge,
+                        text(&pkg.name).size(13).color(MUTED).width(Length::Fill),
+                        text(&pkg.version).size(12).color(MUTED).width(100),
+                        text(&pkg.winget_id)
+                            .size(11)
+                            .font(iced::Font::MONOSPACE)
+                            .color(MUTED)
+                            .width(200),
+                    ]
+                    .spacing(8)
+                    .align_y(iced::Alignment::Center)
+                    .padding([6, 8]);
+
+                    pkg_list = pkg_list.push(container(pkg_row).width(Length::Fill));
+                } else {
+                    let is_checked = self.winget_search_selected.contains(&pkg.winget_id);
+                    let id = pkg.winget_id.clone();
+
+                    let cb = checkbox(is_checked)
+                        .on_toggle(move |_| Message::ToggleWingetSearchPackage(id.clone()))
+                        .size(14)
+                        .style(package_checkbox_style);
+
+                    let pkg_row = row![
+                        cb,
+                        text(&pkg.name).size(13).width(Length::Fill),
+                        text(&pkg.version).size(12).color(MUTED_FG).width(100),
+                        text(&pkg.winget_id)
+                            .size(11)
+                            .font(iced::Font::MONOSPACE)
+                            .color(MUTED)
+                            .width(200),
+                    ]
+                    .spacing(8)
+                    .align_y(iced::Alignment::Center)
+                    .padding([6, 8]);
+
+                    let row_el: Element<'_, Message> = if is_checked {
+                        container(pkg_row)
+                            .style(|_: &_| container::Style {
+                                background: Some(iced::Background::Color(CARD_BG)),
+                                border: iced::Border {
+                                    radius: 6.0.into(),
+                                    ..Default::default()
+                                },
+                                ..Default::default()
+                            })
+                            .width(Length::Fill)
+                            .into()
+                    } else {
+                        container(pkg_row).width(Length::Fill).into()
+                    };
+
+                    pkg_list = pkg_list.push(row_el);
+                }
+            }
+
+            column![
+                col_headers,
+                scrollable(pkg_list.padding(padding::right(20)))
+                    .height(Length::Fill)
+                    .width(Length::Fill),
+            ]
+            .spacing(6)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
+        };
+
+        // Footer
+        let selected_count = self.winget_search_selected.len();
+        let footer_text = text(format!("{selected_count} selected"))
+            .size(13)
+            .color(MUTED);
+
+        let mut select_all_btn = button(text("Select all").size(13))
+            .style(ghost_button_style)
+            .padding([6, 12]);
+        if !self.winget_search_results.is_empty() {
+            select_all_btn = select_all_btn.on_press(Message::SelectAllWingetSearch);
+        }
+
+        let mut install_btn = button(text(format!("Install selected ({selected_count})")).size(14))
+            .style(continue_button_style)
+            .padding([8, 20]);
+        if selected_count > 0 {
+            install_btn = install_btn.on_press(Message::StartWingetSearchInstall);
+        }
+
+        let footer = row![
+            footer_text,
+            iced::widget::Space::new().width(Length::Fill),
+            select_all_btn,
+            install_btn,
+        ]
+        .spacing(8)
+        .align_y(iced::Alignment::Center);
+
+        let content = column![header, search_row, results_content, footer]
+            .spacing(14)
+            .width(Length::Fill)
+            .height(Length::Fill);
+
+        container(content)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .padding(28)
+            .into()
+    }
+
+    pub(crate) fn view_winget_search_installing(&self) -> Element<'_, Message> {
+        view_progress_screen(
+            &self.winget_search_install,
+            &ProgressLabels {
+                verb: "Installing",
+                done_label: "Installation",
+                dry_run_warning: "No packages will actually be installed",
+            },
+            self.winget_search_queue.iter().map(|p| p.name.as_str()),
+            self.dry_run,
+            Message::CancelWingetSearchInstall,
+            Message::FinishWingetSearchInstall,
+            self.spinner_frame,
+        )
+    }
+
+    pub(crate) fn view_github_login(&self) -> Element<'_, Message> {
+        let header = back_header("Clone repos");
+
+        let content: Element<'_, Message> = if let Some(ref error) = self.github_auth_error {
+            container(
+                column![
+                    text(char::from(Icon::CircleX))
+                        .size(32)
+                        .font(LUCIDE_FONT)
+                        .color(STATUS_RED),
+                    text("Authentication failed").size(16),
+                    text(error).size(13).color(MUTED),
+                    button(text("Try again").size(14))
+                        .style(continue_button_style)
+                        .padding([8, 20])
+                        .on_press(Message::GoToGitHubLogin),
+                ]
+                .spacing(12)
+                .align_x(iced::Alignment::Center)
+                .width(Length::Fill),
+            )
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into()
+        } else if let Some(ref code) = self.github_user_code {
+            let code_display = container(text(code).size(28).font(iced::Font::MONOSPACE))
+                .padding([16, 32])
+                .style(|_: &_| container::Style {
+                    background: Some(iced::Background::Color(CARD_BG)),
+                    border: iced::Border {
+                        radius: 8.0.into(),
+                        width: 1.0,
+                        color: BORDER,
+                    },
+                    ..Default::default()
+                });
+
+            let open_btn = button(
+                row![
+                    text(char::from(Icon::ExternalLink))
+                        .size(14)
+                        .font(LUCIDE_FONT),
+                    text("Open GitHub").size(14),
+                ]
+                .spacing(8)
+                .align_y(iced::Alignment::Center),
+            )
+            .style(continue_button_style)
+            .padding([10, 24])
+            .on_press(Message::OpenGitHubUrl);
+
+            container(
+                column![
+                    text("Sign in to GitHub").size(18),
+                    text("Enter this code at github.com/login/device")
+                        .size(13)
+                        .color(MUTED),
+                    code_display,
+                    open_btn,
+                    spinner_indicator(
+                        self.spinner_frame,
+                        "Waiting for authorization...".into(),
+                        MUTED,
+                    ),
+                ]
+                .spacing(16)
+                .align_x(iced::Alignment::Center)
+                .width(Length::Fill),
+            )
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into()
+        } else {
+            container(spinner_indicator(
+                self.spinner_frame,
+                "Connecting to GitHub...".into(),
+                MUTED,
+            ))
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into()
+        };
+
+        let layout = column![header, content]
+            .spacing(14)
+            .width(Length::Fill)
+            .height(Length::Fill);
+
+        container(layout)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .padding(28)
+            .into()
+    }
+
+    pub(crate) fn view_github_repos(&self) -> Element<'_, Message> {
+        let header = back_header("Your repositories");
+
+        let search_field = text_input("Filter repos...", &self.search)
+            .id(iced::widget::Id::new(SEARCH_INPUT_ID))
+            .on_input(Message::SearchChanged)
+            .padding(8)
+            .size(14)
+            .width(Length::Fill);
+
+        let results_content: Element<'_, Message> = if self.github_repos_loading {
+            container(spinner_indicator(
+                self.spinner_frame,
+                "Loading repositories...".into(),
+                MUTED,
+            ))
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into()
+        } else if self.github_repos.is_empty() {
+            let msg = if let Some(ref e) = self.github_auth_error {
+                e.as_str()
+            } else {
+                "No repositories found"
+            };
+            container(text(msg).size(14).color(MUTED))
+                .center_x(Length::Fill)
+                .center_y(Length::Fill)
+                .into()
+        } else {
+            let sl = self.search_lower.as_str();
+            let queued_names: std::collections::HashSet<&str> = self
+                .github_clone_queue
+                .iter()
+                .map(|item| item.repo.full_name.as_str())
+                .collect();
+
+            let mut repo_list = column![].spacing(2).width(Length::Fill);
+
+            for repo in &self.github_repos {
+                if !sl.is_empty() && !repo.name_lower.contains(sl) && !repo.desc_lower.contains(sl)
+                {
+                    continue;
+                }
+
+                let is_queued = queued_names.contains(repo.full_name.as_str());
+
+                let visibility_badge = if repo.private {
+                    text("private").size(10).color(STATUS_AMBER)
+                } else {
+                    text("public").size(10).color(MUTED)
+                };
+
+                let desc = text(repo.description.as_deref().unwrap_or(""))
+                    .size(12)
+                    .color(MUTED);
+
+                let name_col = column![
+                    row![text(&repo.name).size(14), visibility_badge,]
+                        .spacing(8)
+                        .align_y(iced::Alignment::Center),
+                    desc,
+                ]
+                .spacing(2)
+                .width(Length::Fill);
+
+                let action: Element<'_, Message> = if is_queued {
+                    text(char::from(Icon::Check))
+                        .size(14)
+                        .font(LUCIDE_FONT)
+                        .color(STATUS_GREEN)
+                        .into()
+                } else {
+                    let full_name = repo.full_name.clone();
+                    button(text("Select folder").size(12))
+                        .style(ghost_button_style)
+                        .padding([4, 10])
+                        .on_press(Message::GitHubSelectFolder(full_name))
+                        .into()
+                };
+
+                let repo_row = row![name_col, action]
+                    .spacing(8)
+                    .align_y(iced::Alignment::Center)
+                    .padding([8, 12]);
+
+                let row_el: Element<'_, Message> = if is_queued {
+                    container(repo_row)
+                        .style(|_: &_| container::Style {
+                            background: Some(iced::Background::Color(CARD_BG)),
+                            border: iced::Border {
+                                radius: 6.0.into(),
+                                ..Default::default()
+                            },
+                            ..Default::default()
+                        })
+                        .width(Length::Fill)
+                        .into()
+                } else {
+                    container(repo_row).width(Length::Fill).into()
+                };
+
+                repo_list = repo_list.push(row_el);
+            }
+
+            scrollable(repo_list.padding(padding::right(20)))
+                .height(Length::Fill)
+                .width(Length::Fill)
+                .into()
+        };
+
+        // Clone queue section
+        let queue_section: Element<'_, Message> = if self.github_clone_queue.is_empty() {
+            iced::widget::Space::new().height(0).into()
+        } else {
+            let mut queue_col = column![text("Clone queue").size(13).color(MUTED),]
+                .spacing(4)
+                .width(Length::Fill);
+
+            for item in &self.github_clone_queue {
+                let full_name = item.repo.full_name.clone();
+                let remove_btn = button(text(char::from(Icon::X)).size(12).font(LUCIDE_FONT))
+                    .style(ghost_button_style)
+                    .padding([2, 6])
+                    .on_press(Message::GitHubRemoveFromQueue(full_name));
+
+                let queue_row = row![
+                    text(&item.repo.name).size(13),
+                    text(char::from(Icon::ArrowRight))
+                        .size(11)
+                        .font(LUCIDE_FONT)
+                        .color(MUTED),
+                    text(item.destination.display().to_string())
+                        .size(12)
+                        .font(iced::Font::MONOSPACE)
+                        .color(MUTED_FG),
+                    iced::widget::Space::new().width(Length::Fill),
+                    remove_btn,
+                ]
+                .spacing(8)
+                .align_y(iced::Alignment::Center);
+
+                queue_col = queue_col.push(queue_row);
+            }
+
+            queue_col.into()
+        };
+
+        // Footer
+        let queue_count = self.github_clone_queue.len();
+        let mut clone_btn = button(text(format!("Clone all ({queue_count})")).size(14))
+            .style(continue_button_style)
+            .padding([8, 20]);
+        if queue_count > 0 {
+            clone_btn = clone_btn.on_press(Message::StartGitHubClone);
+        }
+
+        let footer = row![iced::widget::Space::new().width(Length::Fill), clone_btn,]
+            .align_y(iced::Alignment::Center);
+
+        let layout = column![header, search_field, results_content, queue_section, footer]
+            .spacing(14)
+            .width(Length::Fill)
+            .height(Length::Fill);
+
+        container(layout)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .padding(28)
+            .into()
+    }
+
+    pub(crate) fn view_github_cloning(&self) -> Element<'_, Message> {
+        view_progress_screen(
+            &self.github_clone,
+            &ProgressLabels {
+                verb: "Cloning",
+                done_label: "Clone",
+                dry_run_warning: "No repos will actually be cloned",
+            },
+            self.github_clone_queue
+                .iter()
+                .map(|item| item.repo.name.as_str()),
+            self.dry_run,
+            Message::CancelGitHubClone,
+            Message::FinishGitHubClone,
+            self.spinner_frame,
+        )
+    }
+
+    pub(crate) fn view_github_bootstrap(&self) -> Element<'_, Message> {
+        let header = text("Setup scripts detected").size(18);
+        let subtitle = text("These repos have bootstrap scripts that can set things up for you.")
+            .size(13)
+            .color(MUTED);
+
+        let mut list = column![].spacing(8).width(Length::Fill);
+
+        for (idx, item) in self.github_bootstrap_items.iter().enumerate() {
+            let status_indicator: Element<'_, Message> = match &item.status {
+                BootstrapStatus::Pending => iced::widget::Space::new().width(0).into(),
+                BootstrapStatus::Running => {
+                    spinner_indicator(self.spinner_frame, "Running...".into(), STATUS_BLUE)
+                }
+                BootstrapStatus::Done => text(char::from(Icon::Check))
+                    .size(14)
+                    .font(LUCIDE_FONT)
+                    .color(STATUS_GREEN)
+                    .into(),
+                BootstrapStatus::Skipped => text("skipped").size(12).color(MUTED).into(),
+                BootstrapStatus::Failed(e) => text(e).size(12).color(STATUS_RED).into(),
+            };
+
+            let actions: Element<'_, Message> = if item.status == BootstrapStatus::Pending {
+                if item.scripts.len() == 1 {
+                    let script = item.scripts[0].clone();
+                    let run_btn = button(
+                        row![
+                            text(char::from(Icon::Play)).size(12).font(LUCIDE_FONT),
+                            text(format!("Run {}", &item.scripts[0])).size(12),
+                        ]
+                        .spacing(6)
+                        .align_y(iced::Alignment::Center),
+                    )
+                    .style(continue_button_style)
+                    .padding([4, 12])
+                    .on_press(Message::GitHubRunBootstrap(idx, script));
+
+                    let skip_btn = button(text("Skip").size(12))
+                        .style(ghost_button_style)
+                        .padding([4, 10])
+                        .on_press(Message::GitHubSkipBootstrap(idx));
+
+                    row![run_btn, skip_btn].spacing(6).into()
+                } else {
+                    let mut btns = row![].spacing(4);
+                    for script in &item.scripts {
+                        let s = script.clone();
+                        btns = btns.push(
+                            button(text(script).size(11))
+                                .style(ghost_button_style)
+                                .padding([4, 8])
+                                .on_press(Message::GitHubRunBootstrap(idx, s)),
+                        );
+                    }
+                    btns = btns.push(
+                        button(text("Skip").size(12))
+                            .style(ghost_button_style)
+                            .padding([4, 10])
+                            .on_press(Message::GitHubSkipBootstrap(idx)),
+                    );
+                    btns.into()
+                }
+            } else {
+                iced::widget::Space::new().width(0).into()
+            };
+
+            let item_row = row![
+                column![
+                    text(&item.repo_name).size(14),
+                    text(item.repo_path.display().to_string())
+                        .size(11)
+                        .font(iced::Font::MONOSPACE)
+                        .color(MUTED),
+                ]
+                .spacing(2)
+                .width(Length::Fill),
+                status_indicator,
+                actions,
+            ]
+            .spacing(12)
+            .align_y(iced::Alignment::Center)
+            .padding([10, 12]);
+
+            list = list.push(
+                container(item_row)
+                    .style(|_: &_| container::Style {
+                        background: Some(iced::Background::Color(CARD_BG)),
+                        border: iced::Border {
+                            radius: 6.0.into(),
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    })
+                    .width(Length::Fill),
+            );
+        }
+
+        let all_handled = self.github_bootstrap_items.iter().all(|item| {
+            !matches!(
+                item.status,
+                BootstrapStatus::Pending | BootstrapStatus::Running
+            )
+        });
+
+        let mut done_btn = button(text("Done").size(14))
+            .style(continue_button_style)
+            .padding([8, 20]);
+        if all_handled {
+            done_btn = done_btn.on_press(Message::FinishGitHubBootstrap);
+        }
+
+        let footer = row![iced::widget::Space::new().width(Length::Fill), done_btn,];
+
+        let layout = column![header, subtitle, list, footer]
+            .spacing(14)
+            .width(Length::Fill)
+            .height(Length::Fill);
+
+        container(layout)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .padding(28)
+            .into()
     }
 }
 

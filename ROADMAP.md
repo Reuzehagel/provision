@@ -2,7 +2,9 @@
 
 Potential future features, roughly ordered by impact-to-effort ratio:
 
-- **Package search** — Search winget's full catalog (`winget search`) and add packages on the fly, not just from the curated `packages.toml`. Reuse existing table parser from `upgrade.rs`.
+- ~~**Package search**~~ *(done)* — Search winget's full catalog via `winget search`.
+- **GitHub repo cloning** — Standalone tool: log in to GitHub, browse/search your repos, pick a clone location, clone. Useful for dotfiles, project repos, etc.
+- **Guided setup wizard** — Dedicated walkthrough screens for packages needing manual steps (e.g. WSL restart, Topping manual download, bun shell config). Step-by-step instructions with "next" navigation instead of silent install.
 - **Export to script** — Generate a standalone `.ps1` script from the current selection (`winget install --id X` per package). Useful for sharing setups or running without the app.
 
 ## Later

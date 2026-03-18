@@ -1,4 +1,5 @@
 mod catalog;
+mod github;
 mod install;
 mod profile;
 mod settings;
@@ -331,6 +332,27 @@ pub(crate) struct App {
     pub(crate) system_info: sysinfo::SystemInfo,
     // Spinner animation
     pub(crate) spinner_frame: usize,
+    // Winget search state
+    pub(crate) winget_search_query: String,
+    pub(crate) winget_search_results: Vec<upgrade::SearchPackage>,
+    pub(crate) winget_search_selected: HashSet<String>,
+    pub(crate) winget_search_scanning: bool,
+    pub(crate) winget_search_error: Option<String>,
+    pub(crate) winget_search_queue: Vec<upgrade::SearchPackage>,
+    pub(crate) winget_search_install: ProgressState,
+    pub(crate) _winget_search_handle: Option<task::Handle>,
+    // GitHub clone state
+    pub(crate) github_token: Option<String>,
+    pub(crate) github_user_code: Option<String>,
+    pub(crate) github_verification_uri: Option<String>,
+    pub(crate) github_polling: bool,
+    pub(crate) github_auth_error: Option<String>,
+    pub(crate) github_repos: Vec<github::GitHubRepo>,
+    pub(crate) github_repos_loading: bool,
+    pub(crate) github_clone_queue: Vec<github::CloneItem>,
+    pub(crate) github_clone: ProgressState,
+    pub(crate) github_bootstrap_items: Vec<github::BootstrapItem>,
+    pub(crate) _github_device_flow_handle: Option<task::Handle>,
 }
 
 impl App {
@@ -389,6 +411,25 @@ impl App {
                 latest_release: None,
                 version_check_in_progress: !dry_run,
                 spinner_frame: 0,
+                winget_search_query: String::new(),
+                winget_search_results: Vec::new(),
+                winget_search_selected: HashSet::new(),
+                winget_search_scanning: false,
+                winget_search_error: None,
+                winget_search_queue: Vec::new(),
+                winget_search_install: ProgressState::default(),
+                _winget_search_handle: None,
+                github_token: None,
+                github_user_code: None,
+                github_verification_uri: None,
+                github_polling: false,
+                github_auth_error: None,
+                github_repos: Vec::new(),
+                github_repos_loading: false,
+                github_clone_queue: Vec::new(),
+                github_clone: ProgressState::default(),
+                github_bootstrap_items: Vec::new(),
+                _github_device_flow_handle: None,
             },
             Task::batch([scan_task, catalog_task, version_task]),
         )
@@ -409,6 +450,12 @@ pub(crate) enum Screen {
     UninstallSelect,
     UninstallReview,
     Uninstalling,
+    WingetSearch,
+    WingetSearchInstalling,
+    GitHubLogin,
+    GitHubRepos,
+    GitHubCloning,
+    GitHubBootstrap,
 }
 
 #[derive(Debug, Clone)]
@@ -462,6 +509,41 @@ pub(crate) enum Message {
     UninstallProgress(install::InstallProgress),
     FinishUninstallAndReset,
     SizeScanResult(Vec<(String, u64)>),
+    GoToWingetSearch,
+    WingetSearchQueryChanged(String),
+    StartWingetSearch,
+    WingetSearchProgress(upgrade::SearchProgress),
+    ToggleWingetSearchPackage(String),
+    StartWingetSearchInstall,
+    CancelWingetSearchInstall,
+    WingetSearchInstallProgress(install::InstallProgress),
+    FinishWingetSearchInstall,
+    SelectAllWingetSearch,
+    #[allow(dead_code)]
+    GoToGitHubLogin,
+    GitHubDeviceFlowProgress(github::DeviceFlowProgress),
+    GitHubReposFetched(Result<Vec<github::GitHubRepo>, String>),
+    #[allow(dead_code)]
+    GitHubSelectFolder(String),
+    GitHubFolderPicked(String, std::path::PathBuf),
+    #[allow(dead_code)]
+    GitHubRemoveFromQueue(String),
+    #[allow(dead_code)]
+    StartGitHubClone,
+    #[allow(dead_code)]
+    CancelGitHubClone,
+    GitHubCloneProgress(install::InstallProgress),
+    #[allow(dead_code)]
+    FinishGitHubClone,
+    #[allow(dead_code)]
+    GitHubRunBootstrap(usize, String),
+    #[allow(dead_code)]
+    GitHubSkipBootstrap(usize),
+    GitHubBootstrapDone(usize, Result<String, String>),
+    #[allow(dead_code)]
+    FinishGitHubBootstrap,
+    #[allow(dead_code)]
+    OpenGitHubUrl,
     KeyConfirm,
     KeyEscape,
     FocusSearch,
@@ -519,6 +601,80 @@ impl App {
             Message::UninstallProgress(event) => self.handle_uninstall_progress(event),
             Message::FinishUninstallAndReset => self.handle_finish_uninstall_and_reset(),
             Message::SizeScanResult(sizes) => self.handle_size_scan_result(sizes),
+            Message::GoToWingetSearch => self.handle_go_to_winget_search(),
+            Message::WingetSearchQueryChanged(v) => {
+                self.winget_search_query = v;
+                Task::none()
+            }
+            Message::StartWingetSearch => self.handle_start_winget_search(),
+            Message::WingetSearchProgress(e) => self.handle_winget_search_progress(e),
+            Message::ToggleWingetSearchPackage(id) => {
+                if !self.winget_search_selected.remove(&id) {
+                    self.winget_search_selected.insert(id);
+                }
+                Task::none()
+            }
+            Message::StartWingetSearchInstall => self.handle_start_winget_search_install(),
+            Message::CancelWingetSearchInstall => self.handle_cancel_winget_search_install(),
+            Message::WingetSearchInstallProgress(e) => {
+                self.handle_winget_search_install_progress(e)
+            }
+            Message::FinishWingetSearchInstall => self.handle_finish_winget_search_install(),
+            Message::SelectAllWingetSearch => self.handle_select_all_winget_search(),
+            Message::GoToGitHubLogin => self.handle_go_to_github_login(),
+            Message::GitHubDeviceFlowProgress(e) => self.handle_github_device_flow_progress(e),
+            Message::GitHubReposFetched(r) => self.handle_github_repos_fetched(r),
+            Message::GitHubSelectFolder(full_name) => self.handle_github_select_folder(full_name),
+            Message::GitHubFolderPicked(full_name, path) => {
+                self.github_clone_queue.push(github::CloneItem {
+                    repo: self
+                        .github_repos
+                        .iter()
+                        .find(|r| r.full_name == full_name)
+                        .cloned()
+                        .expect("repo must exist"),
+                    destination: path,
+                });
+                Task::none()
+            }
+            Message::GitHubRemoveFromQueue(full_name) => {
+                self.github_clone_queue
+                    .retain(|item| item.repo.full_name != full_name);
+                Task::none()
+            }
+            Message::StartGitHubClone => self.handle_start_github_clone(),
+            Message::CancelGitHubClone => self.handle_cancel_github_clone(),
+            Message::GitHubCloneProgress(e) => self.handle_github_clone_progress(e),
+            Message::FinishGitHubClone => self.handle_finish_github_clone(),
+            Message::GitHubRunBootstrap(idx, script) => {
+                self.handle_github_run_bootstrap(idx, script)
+            }
+            Message::GitHubSkipBootstrap(idx) => {
+                if let Some(item) = self.github_bootstrap_items.get_mut(idx) {
+                    item.status = github::BootstrapStatus::Skipped;
+                }
+                Task::none()
+            }
+            Message::GitHubBootstrapDone(idx, result) => {
+                if let Some(item) = self.github_bootstrap_items.get_mut(idx) {
+                    match result {
+                        Ok(_) => item.status = github::BootstrapStatus::Done,
+                        Err(e) => item.status = github::BootstrapStatus::Failed(e),
+                    }
+                }
+                Task::none()
+            }
+            Message::FinishGitHubBootstrap => {
+                self.github_bootstrap_items.clear();
+                self.screen = Screen::GitHubRepos;
+                Task::none()
+            }
+            Message::OpenGitHubUrl => {
+                if let Some(ref uri) = self.github_verification_uri {
+                    github::open_url(uri);
+                }
+                Task::none()
+            }
             Message::ToggleCategory(cat) => self.handle_toggle_category(cat),
             Message::SelectAll => self.handle_select_all(),
             Message::ExportSelection => self.handle_export_selection(),
@@ -575,6 +731,7 @@ impl App {
                 self.install.copy_status = false;
                 self.upgrade.copy_status = false;
                 self.uninstall.copy_status = false;
+                self.github_clone.copy_status = false;
                 Task::none()
             }
             Message::SetInstallMode(mode) => {
@@ -701,6 +858,21 @@ impl App {
                 self.screen = Screen::ProfileSelect;
             }
             Screen::UninstallSelect => {
+                self.screen = Screen::ProfileSelect;
+            }
+            Screen::WingetSearch => {
+                self._winget_search_handle = None;
+                self.screen = Screen::ProfileSelect;
+            }
+            Screen::GitHubLogin => {
+                self._github_device_flow_handle = None;
+                self.github_polling = false;
+                self.screen = Screen::ProfileSelect;
+            }
+            Screen::GitHubRepos => {
+                self.github_token = None;
+                self.github_repos.clear();
+                self.github_clone_queue.clear();
                 self.screen = Screen::ProfileSelect;
             }
             Screen::UninstallReview => {
@@ -964,6 +1136,286 @@ impl App {
         Task::none()
     }
 
+    // ── Winget search flow ────────────────────────────────────
+
+    fn handle_go_to_winget_search(&mut self) -> Task<Message> {
+        self.winget_search_results.clear();
+        self.winget_search_selected.clear();
+        self.winget_search_error = None;
+        self.winget_search_scanning = false;
+        self._winget_search_handle = None;
+        self.screen = Screen::WingetSearch;
+        widget::operation::focus(widget::Id::new(SEARCH_INPUT_ID))
+    }
+
+    fn handle_start_winget_search(&mut self) -> Task<Message> {
+        let query = self.winget_search_query.trim().to_string();
+        if query.is_empty() {
+            return Task::none();
+        }
+
+        self.winget_search_results.clear();
+        self.winget_search_selected.clear();
+        self.winget_search_error = None;
+        self.winget_search_scanning = true;
+
+        let dry = self.dry_run;
+        let (task, handle) = Task::run(
+            upgrade::search_winget(query, dry),
+            Message::WingetSearchProgress,
+        )
+        .abortable();
+
+        self._winget_search_handle = Some(handle.abort_on_drop());
+        task
+    }
+
+    fn handle_winget_search_progress(&mut self, event: upgrade::SearchProgress) -> Task<Message> {
+        match event {
+            upgrade::SearchProgress::Activity { .. } => {}
+            upgrade::SearchProgress::Completed { packages } => {
+                self.winget_search_results = packages;
+                self.winget_search_scanning = false;
+                self._winget_search_handle = None;
+            }
+            upgrade::SearchProgress::Failed { error } => {
+                self.winget_search_error = Some(error);
+                self.winget_search_scanning = false;
+                self._winget_search_handle = None;
+            }
+        }
+        Task::none()
+    }
+
+    fn handle_start_winget_search_install(&mut self) -> Task<Message> {
+        let queue: Vec<upgrade::SearchPackage> = self
+            .winget_search_results
+            .iter()
+            .filter(|p| self.winget_search_selected.contains(&p.winget_id))
+            .cloned()
+            .collect();
+
+        if queue.is_empty() {
+            return Task::none();
+        }
+
+        self.winget_search_install.start(queue.len());
+        self.winget_search_queue = queue.clone();
+        self.screen = Screen::WingetSearchInstalling;
+
+        let dry = self.dry_run;
+        let extra = self.settings.install_args();
+        let (task, handle) = Task::run(
+            upgrade::search_install_all(queue, dry, extra),
+            Message::WingetSearchInstallProgress,
+        )
+        .abortable();
+
+        self.winget_search_install._handle = Some(handle.abort_on_drop());
+        task
+    }
+
+    fn handle_cancel_winget_search_install(&mut self) -> Task<Message> {
+        self.winget_search_install.cancel("Installation");
+        Task::none()
+    }
+
+    fn handle_winget_search_install_progress(
+        &mut self,
+        event: install::InstallProgress,
+    ) -> Task<Message> {
+        let queue = &self.winget_search_queue;
+        self.winget_search_install.handle_event(event, |i| {
+            let name = queue.get(i).map(|p| p.name.as_str()).unwrap_or("...");
+            format!("Installing {name}")
+        });
+        Task::none()
+    }
+
+    fn handle_finish_winget_search_install(&mut self) -> Task<Message> {
+        self.winget_search_queue.clear();
+        self.winget_search_install = ProgressState::default();
+        self.winget_search_selected.clear();
+        self.screen = Screen::WingetSearch;
+
+        // Re-scan installed packages so installed_map stays current
+        let (scan_task, handle) = Task::run(
+            upgrade::scan_installed(self.dry_run),
+            Message::InstalledScanProgress,
+        )
+        .abortable();
+        self.installed_scan_done = false;
+        self._installed_scan_handle = Some(handle.abort_on_drop());
+
+        let focus_task = widget::operation::focus(widget::Id::new(SEARCH_INPUT_ID));
+        Task::batch([scan_task, focus_task])
+    }
+
+    fn handle_select_all_winget_search(&mut self) -> Task<Message> {
+        let all_ids: Vec<String> = self
+            .winget_search_results
+            .iter()
+            .map(|p| p.winget_id.clone())
+            .collect();
+        toggle_set(&mut self.winget_search_selected, all_ids);
+        Task::none()
+    }
+
+    // ── GitHub clone flow ────────────────────────────────────
+
+    fn handle_go_to_github_login(&mut self) -> Task<Message> {
+        self.github_token = None;
+        self.github_user_code = None;
+        self.github_verification_uri = None;
+        self.github_auth_error = None;
+        self.github_polling = true;
+        self.github_repos.clear();
+        self.github_clone_queue.clear();
+        self.clear_search();
+        self.screen = Screen::GitHubLogin;
+
+        let dry = self.dry_run;
+        let (task, handle) =
+            Task::run(github::device_flow(dry), Message::GitHubDeviceFlowProgress).abortable();
+        self._github_device_flow_handle = Some(handle.abort_on_drop());
+        task
+    }
+
+    fn handle_github_device_flow_progress(
+        &mut self,
+        event: github::DeviceFlowProgress,
+    ) -> Task<Message> {
+        match event {
+            github::DeviceFlowProgress::CodeReady {
+                user_code,
+                verification_uri,
+            } => {
+                self.github_user_code = Some(user_code);
+                self.github_verification_uri = Some(verification_uri);
+            }
+            github::DeviceFlowProgress::Authenticated { token } => {
+                self.github_token = Some(token.clone());
+                self.github_polling = false;
+                self._github_device_flow_handle = None;
+                self.github_repos_loading = true;
+                self.screen = Screen::GitHubRepos;
+
+                let dry = self.dry_run;
+                return Task::perform(
+                    async move { github::fetch_repos(&token, dry).await },
+                    Message::GitHubReposFetched,
+                );
+            }
+            github::DeviceFlowProgress::Failed { error } => {
+                self.github_auth_error = Some(error);
+                self.github_polling = false;
+                self._github_device_flow_handle = None;
+            }
+        }
+        Task::none()
+    }
+
+    fn handle_github_repos_fetched(
+        &mut self,
+        result: Result<Vec<github::GitHubRepo>, String>,
+    ) -> Task<Message> {
+        self.github_repos_loading = false;
+        match result {
+            Ok(repos) => {
+                self.github_repos = repos;
+            }
+            Err(e) => {
+                self.github_auth_error = Some(e);
+            }
+        }
+        Task::none()
+    }
+
+    fn handle_github_select_folder(&mut self, full_name: String) -> Task<Message> {
+        Task::perform(
+            async {
+                let folder = rfd::AsyncFileDialog::new()
+                    .set_title("Select clone destination")
+                    .pick_folder()
+                    .await;
+                (full_name, folder)
+            },
+            |(full_name, folder)| {
+                if let Some(handle) = folder {
+                    Message::GitHubFolderPicked(full_name, handle.path().to_path_buf())
+                } else {
+                    Message::KeyIgnored
+                }
+            },
+        )
+    }
+
+    fn handle_start_github_clone(&mut self) -> Task<Message> {
+        if self.github_clone_queue.is_empty() {
+            return Task::none();
+        }
+
+        let queue = self.github_clone_queue.clone();
+        self.github_clone.start(queue.len());
+        self.screen = Screen::GitHubCloning;
+
+        let token = self.github_token.clone().unwrap_or_default();
+        let dry = self.dry_run;
+        let (task, handle) = Task::run(
+            github::clone_all(queue, token, dry),
+            Message::GitHubCloneProgress,
+        )
+        .abortable();
+
+        self.github_clone._handle = Some(handle.abort_on_drop());
+        task
+    }
+
+    fn handle_cancel_github_clone(&mut self) -> Task<Message> {
+        self.github_clone.cancel("Clone");
+        Task::none()
+    }
+
+    fn handle_github_clone_progress(&mut self, event: install::InstallProgress) -> Task<Message> {
+        let queue = &self.github_clone_queue;
+        self.github_clone.handle_event(event, |i| {
+            let name = queue
+                .get(i)
+                .map(|item| item.repo.name.as_str())
+                .unwrap_or("...");
+            format!("Cloning {name}")
+        });
+        Task::none()
+    }
+
+    fn handle_finish_github_clone(&mut self) -> Task<Message> {
+        let bootstrap_items = github::detect_bootstrap_scripts(&self.github_clone_queue);
+
+        self.github_clone = ProgressState::default();
+
+        if bootstrap_items.is_empty() {
+            self.github_clone_queue.clear();
+            self.screen = Screen::GitHubRepos;
+        } else {
+            self.github_bootstrap_items = bootstrap_items;
+            self.github_clone_queue.clear();
+            self.screen = Screen::GitHubBootstrap;
+        }
+        Task::none()
+    }
+
+    fn handle_github_run_bootstrap(&mut self, idx: usize, script: String) -> Task<Message> {
+        if let Some(item) = self.github_bootstrap_items.get_mut(idx) {
+            item.status = github::BootstrapStatus::Running;
+            let path = item.repo_path.clone();
+            return Task::perform(
+                async move { github::run_bootstrap(&path, &script).await },
+                move |result| Message::GitHubBootstrapDone(idx, result),
+            );
+        }
+        Task::none()
+    }
+
     // ── Selection ────────────────────────────────────────────────
 
     fn handle_toggle_category(&mut self, cat: String) -> Task<Message> {
@@ -1013,6 +1465,9 @@ impl App {
                     .map(|p| p.winget_id_lower.clone())
                     .collect();
                 toggle_set(&mut self.uninstall_selected, filtered);
+            }
+            Screen::WingetSearch => {
+                return self.handle_select_all_winget_search();
             }
             _ => {}
         }
@@ -1072,6 +1527,8 @@ impl App {
         let state = match self.screen {
             Screen::Updating => &mut self.upgrade,
             Screen::Uninstalling => &mut self.uninstall,
+            Screen::WingetSearchInstalling => &mut self.winget_search_install,
+            Screen::GitHubCloning => &mut self.github_clone,
             _ => &mut self.install,
         };
         let (done, failed, cancelled) = state.status_counts();
@@ -1146,6 +1603,23 @@ impl App {
             }
             Screen::UninstallReview => self.handle_start_uninstall(),
             Screen::Uninstalling if self.uninstall.done => self.handle_finish_uninstall_and_reset(),
+            Screen::WingetSearch
+                if !self.winget_search_scanning
+                    && !self.winget_search_query.trim().is_empty()
+                    && self.winget_search_results.is_empty() =>
+            {
+                self.handle_start_winget_search()
+            }
+            Screen::WingetSearch if !self.winget_search_selected.is_empty() => {
+                self.handle_start_winget_search_install()
+            }
+            Screen::WingetSearchInstalling if self.winget_search_install.done => {
+                self.handle_finish_winget_search_install()
+            }
+            Screen::GitHubRepos if !self.github_clone_queue.is_empty() => {
+                self.handle_start_github_clone()
+            }
+            Screen::GitHubCloning if self.github_clone.done => self.handle_finish_github_clone(),
             _ => Task::none(),
         }
     }
@@ -1156,19 +1630,36 @@ impl App {
                 self.handle_go_back()
             }
             Screen::UninstallSelect | Screen::UninstallReview => self.handle_go_back(),
+            Screen::WingetSearch => self.handle_go_back(),
+            Screen::WingetSearchInstalling if !self.winget_search_install.done => {
+                self.handle_cancel_winget_search_install()
+            }
+            Screen::WingetSearchInstalling if self.winget_search_install.done => {
+                self.handle_finish_winget_search_install()
+            }
             Screen::Installing if !self.install.done => self.handle_cancel_install(),
             Screen::UpdateScanning if !self.update_scan.done => self.handle_cancel_update_scan(),
             Screen::Updating if !self.upgrade.done => self.handle_cancel_upgrade(),
             Screen::Uninstalling if !self.uninstall.done => self.handle_cancel_uninstall(),
+            Screen::GitHubLogin | Screen::GitHubRepos => self.handle_go_back(),
+            Screen::GitHubCloning if !self.github_clone.done => self.handle_cancel_github_clone(),
+            Screen::GitHubCloning if self.github_clone.done => self.handle_finish_github_clone(),
+            Screen::GitHubBootstrap => {
+                self.github_bootstrap_items.clear();
+                self.screen = Screen::GitHubRepos;
+                Task::none()
+            }
             _ => Task::none(),
         }
     }
 
     fn handle_focus_search(&self) -> Task<Message> {
         match self.screen {
-            Screen::PackageSelect | Screen::UpdateSelect | Screen::UninstallSelect => {
-                widget::operation::focus(widget::Id::new(SEARCH_INPUT_ID))
-            }
+            Screen::PackageSelect
+            | Screen::UpdateSelect
+            | Screen::UninstallSelect
+            | Screen::WingetSearch
+            | Screen::GitHubRepos => widget::operation::focus(widget::Id::new(SEARCH_INPUT_ID)),
             _ => Task::none(),
         }
     }
@@ -1186,6 +1677,12 @@ impl App {
             Screen::UninstallSelect => self.view_uninstall_select(),
             Screen::UninstallReview => self.view_uninstall_review(),
             Screen::Uninstalling => self.view_uninstalling(),
+            Screen::WingetSearch => self.view_winget_search(),
+            Screen::WingetSearchInstalling => self.view_winget_search_installing(),
+            Screen::GitHubLogin => self.view_github_login(),
+            Screen::GitHubRepos => self.view_github_repos(),
+            Screen::GitHubCloning => self.view_github_cloning(),
+            Screen::GitHubBootstrap => self.view_github_bootstrap(),
         }
     }
 
@@ -1209,7 +1706,13 @@ impl App {
             || matches!(self.screen, Screen::Installing if !self.install.done)
             || matches!(self.screen, Screen::UpdateScanning if !self.update_scan.done)
             || matches!(self.screen, Screen::Updating if !self.upgrade.done)
-            || matches!(self.screen, Screen::Uninstalling if !self.uninstall.done);
+            || matches!(self.screen, Screen::Uninstalling if !self.uninstall.done)
+            || matches!(self.screen, Screen::WingetSearch if self.winget_search_scanning)
+            || matches!(self.screen, Screen::WingetSearchInstalling if !self.winget_search_install.done)
+            || matches!(self.screen, Screen::GitHubLogin if self.github_polling)
+            || matches!(self.screen, Screen::GitHubRepos if self.github_repos_loading)
+            || matches!(self.screen, Screen::GitHubCloning if !self.github_clone.done)
+            || matches!(self.screen, Screen::GitHubBootstrap if self.github_bootstrap_items.iter().any(|i| i.status == github::BootstrapStatus::Running));
 
         if spinner_active {
             Subscription::batch([

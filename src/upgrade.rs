@@ -121,11 +121,123 @@ impl BatchItem for InstalledPackage {
 }
 
 #[derive(Debug, Clone)]
+pub struct SearchPackage {
+    pub name: String,
+    pub winget_id: String,
+    pub version: String,
+    #[allow(dead_code)]
+    pub source: String,
+    #[allow(dead_code)]
+    pub name_lower: String,
+    pub winget_id_lower: String,
+}
+
+impl BatchItem for SearchPackage {
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn winget_id(&self) -> &str {
+        &self.winget_id
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum SearchProgress {
+    Activity {
+        #[allow(dead_code)]
+        line: String,
+    },
+    Completed {
+        packages: Vec<SearchPackage>,
+    },
+    Failed {
+        #[allow(dead_code)]
+        error: String,
+    },
+}
+
+#[derive(Debug, Clone)]
 pub enum ScanProgress {
     Activity { line: String },
     Log { line: String },
     Completed { packages: Vec<UpgradeablePackage> },
     Failed { error: String },
+}
+
+pub fn search_winget(
+    query: String,
+    dry_run: bool,
+) -> impl futures::Stream<Item = SearchProgress> + Send {
+    stream::channel(
+        100,
+        move |mut sender: futures::channel::mpsc::Sender<SearchProgress>| async move {
+            if dry_run {
+                let _ = sender
+                    .send(SearchProgress::Activity {
+                        line: format!("Searching for \"{query}\"..."),
+                    })
+                    .await;
+
+                tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+
+                let fake = vec![
+                    SearchPackage {
+                        name: "Notepad++".into(),
+                        winget_id: "Notepad++.Notepad++".into(),
+                        version: "8.7.1".into(),
+                        source: "winget".into(),
+                        name_lower: "notepad++".into(),
+                        winget_id_lower: "notepad++.notepad++".into(),
+                    },
+                    SearchPackage {
+                        name: "WinSCP".into(),
+                        winget_id: "WinSCP.WinSCP".into(),
+                        version: "6.3.3".into(),
+                        source: "winget".into(),
+                        name_lower: "winscp".into(),
+                        winget_id_lower: "winscp.winscp".into(),
+                    },
+                    SearchPackage {
+                        name: "KeePass".into(),
+                        winget_id: "DominikReichl.KeePass".into(),
+                        version: "2.57.1".into(),
+                        source: "winget".into(),
+                        name_lower: "keepass".into(),
+                        winget_id_lower: "dominikreichl.keepass".into(),
+                    },
+                ];
+
+                let _ = sender
+                    .send(SearchProgress::Completed { packages: fake })
+                    .await;
+                return;
+            }
+
+            let Ok(all_lines) = run_winget_scan(
+                &[
+                    "search",
+                    &query,
+                    "--count",
+                    "100",
+                    "--accept-source-agreements",
+                ],
+                &mut sender,
+                |e| match e {
+                    ScanEvent::Activity(line) | ScanEvent::Log(line) => {
+                        SearchProgress::Activity { line }
+                    }
+                    ScanEvent::Failed(error) => SearchProgress::Failed { error },
+                },
+            )
+            .await
+            else {
+                return;
+            };
+
+            let packages = parse_search_table(&all_lines);
+            let _ = sender.send(SearchProgress::Completed { packages }).await;
+        },
+    )
 }
 
 pub fn scan_installed(dry_run: bool) -> impl futures::Stream<Item = InstalledScanProgress> + Send {
@@ -430,6 +542,78 @@ pub fn parse_upgrade_table(lines: &[String]) -> Vec<UpgradeablePackage> {
     packages
 }
 
+pub fn parse_search_table(lines: &[String]) -> Vec<SearchPackage> {
+    let header_idx = lines
+        .iter()
+        .position(|l| l.contains("Name") && l.contains("Id") && l.contains("Version"));
+
+    let Some(header_idx) = header_idx else {
+        return Vec::new();
+    };
+
+    let header = &lines[header_idx];
+
+    let Some(name_col) = header.find("Name") else {
+        return Vec::new();
+    };
+    let Some(id_col) = header.find("Id") else {
+        return Vec::new();
+    };
+    let Some(version_col) = header.find("Version") else {
+        return Vec::new();
+    };
+
+    // "Match" column is optional — only present for partial matches
+    let match_col = header.find("Match");
+    let source_col = header.find("Source");
+
+    // Version ends at Match if present, otherwise at Source, otherwise end of line
+    let version_end = match_col.or(source_col).unwrap_or(usize::MAX);
+
+    let data_start = find_data_start(lines, header_idx);
+
+    let mut packages = Vec::new();
+
+    for line in &lines[data_start..] {
+        if line.len() < version_col + 1 {
+            continue;
+        }
+
+        let name = safe_slice(line, name_col, id_col);
+        let id = safe_slice(line, id_col, version_col);
+        let version = if version_end < usize::MAX {
+            safe_slice(line, version_col, version_end)
+        } else {
+            safe_slice_to_end(line, version_col)
+        };
+
+        let source = if let Some(sc) = source_col {
+            if line.len() > sc {
+                safe_slice_to_end(line, sc)
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        };
+
+        if id.is_empty() {
+            continue;
+        }
+
+        packages.push(SearchPackage {
+            name_lower: name.to_lowercase(),
+            winget_id_lower: id.to_lowercase(),
+            name,
+            winget_id: id,
+            version,
+            source,
+        });
+    }
+
+    packages
+}
+
 /// Find the first data row after the header, skipping any separator line (dashes).
 fn find_data_start(lines: &[String], header_idx: usize) -> usize {
     if header_idx + 1 >= lines.len() {
@@ -483,6 +667,20 @@ pub fn upgrade_all(
     install::run_winget_batch(
         packages,
         "upgrade",
+        vec!["--accept-package-agreements", "--accept-source-agreements"],
+        dry_run,
+        extra_args,
+    )
+}
+
+pub fn search_install_all(
+    packages: Vec<SearchPackage>,
+    dry_run: bool,
+    extra_args: Vec<String>,
+) -> impl futures::Stream<Item = InstallProgress> + Send {
+    install::run_winget_batch(
+        packages,
+        "install",
         vec!["--accept-package-agreements", "--accept-source-agreements"],
         dry_run,
         extra_args,
