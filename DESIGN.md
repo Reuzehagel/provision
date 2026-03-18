@@ -92,20 +92,30 @@ _(Tighter than current 12px/8px — shadcn uses subtle rounding)_
 
 ## Components
 
-### Profile Cards (Home Screen)
+### Home Screen — Dashboard Layout
 
-- **All 4 cards in a 2×2 grid, equal size** using `Length::Fill` (not fixed 340px)
-- Each card has: icon (20px) → title (16px) → description (13px)
-- Background: `CARD`, border: 1px `BORDER`
-- Hover: bg `CARD_HOVER`, border `BORDER_FOCUS`
-- Padding: 20px
-- Gap between cards: 12px
+Three-section dashboard within a centered ~500px column:
 
-### Update Card (Home Screen)
+**Hero Card** (gradient container):
+- Top row: Provision logo + title (left), system info (right, muted 9px)
+- Bottom row: 3 equal-width profile buttons (Laptop, Desktop, Manual)
+- Background: 135° gradient from dark slate-blue to `CARD`
+- Padding: 16px, border: 1px `BORDER`, radius: 8px
 
-- **Same width as the 2×2 grid** — sits in the same container, takes full width
-- Same card style as profile cards
-- Row layout: icon + [title, description]
+**Update Banner** (full-width card):
+- Left: large update count (28px, `SUCCESS`) or "—" placeholder
+- Center: label + stats line (installed/catalog counts)
+- Right: green Scan button (`SUCCESS` bg, `BG` text)
+- Padding: 16px, same card styling as other cards
+
+**Tool Tiles** (3-column grid):
+- Uninstall (red), Search (amber), Repos (purple)
+- Each: colored icon in tinted rounded-square (32×32, 8px radius), label below
+- Each tile is a button with `CARD` bg, 1px `BORDER`, 8px radius
+
+**Footer**:
+- Left: catalog status indicator
+- Right: version label + settings gear button
 
 ### Back Button
 
@@ -234,34 +244,29 @@ Named constants via `Icon` enum: `Icon::ArrowLeft`, `Icon::ChevronLeft`, `Icon::
 └──────────────────────────────────────┘
 ```
 
-### Home Screen (Profile Select)
+### Home Screen (Dashboard)
 
 ```
 ┌──────────────────────────────────────┐
-│           Provision                  │
-│    Choose a profile to get started   │
-│     153 packages detected            │
+│  padding: 32px                       │
+│  ┌──────────────────────────────────┐│
+│  │ ◆ Provision     hostname · cpu  ││
+│  │ [Laptop] [Desktop] [Manual]     ││
+│  └──────────────────────────────────┘│
 │                                      │
-│  ┌──────────────┐ ┌──────────────┐   │
-│  │ Personal     │ │ Work         │   │
-│  │ Browsers,    │ │ Dev tools,   │   │
-│  │ media, ...   │ │ comms, ...   │   │
-│  └──────────────┘ └──────────────┘   │
-│  ┌──────────────┐ ┌──────────────┐   │
-│  │ Homelab      │ │ Manual       │   │
-│  │ Server util, │ │ Start from   │   │
-│  │ containers   │ │ scratch      │   │
-│  └──────────────┘ └──────────────┘   │
+│  ┌──────────────────────────────────┐│
+│  │  3   Updates available    [Scan]││
+│  │      188 installed · 93 catalog ││
+│  └──────────────────────────────────┘│
 │                                      │
-│  ┌──────────────────────────────┐    │
-│  │ Update                       │    │
-│  │ Check for outdated packages  │    │
-│  └──────────────────────────────┘    │
+│  ┌──────────┐┌──────────┐┌─────────┐│
+│  │  ⊘       ││  ⌕       ││  ⑂      ││
+│  │ Uninstall││ Search   ││ Repos   ││
+│  └──────────┘└──────────┘└─────────┘│
+│                                      │
+│  ✓ 93 packages        v0.3.2 · ⚙   │
 └──────────────────────────────────────┘
 ```
-
-All 4 profile cards: same size, all have descriptions.
-Update card: same total width as the 2×2 grid.
 
 ---
 
