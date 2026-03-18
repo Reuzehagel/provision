@@ -14,90 +14,176 @@ use lucide_icons::Icon;
 
 use crate::github::BootstrapStatus;
 use crate::styles::{
-    BORDER, CARD_BG, LUCIDE_FONT, MUTED, MUTED_FG, STATUS_AMBER, STATUS_BLUE, STATUS_GREEN,
-    STATUS_RED, TERMINAL_TEXT, TEXT, browser_badge_style, cancel_button_style, card_style,
-    continue_button_style, danger_button_style, divider_style, ghost_button_style, icon_box_style,
-    installed_badge_style, package_checkbox_style, tab_style, terminal_box_style,
+    BORDER, CARD_BG, LUCIDE_FONT, MUTED, MUTED_FG, REPOS_PURPLE, STATUS_AMBER, STATUS_BLUE,
+    STATUS_GREEN, STATUS_RED, TERMINAL_TEXT, TEXT, browser_badge_style, cancel_button_style,
+    card_style, continue_button_style, danger_button_style, ghost_button_style, hero_card_style,
+    hero_profile_button_style, icon_box_style, installed_badge_style, package_checkbox_style,
+    scan_button_style, tab_style, terminal_box_style, tinted_icon_bg, tool_tile_style,
     update_banner_style, update_card_style, warning_badge_style,
 };
 use crate::{App, LogBuffer, Message, ProgressState};
 
 impl App {
     pub(crate) fn view_profile_select(&self) -> Element<'_, Message> {
-        // Logo icon box
-        let logo_icon = text(char::from(Icon::Package))
-            .size(20)
+        // ── Section 1: Hero Card ────────────────────────────────
+        let si = &self.system_info;
+
+        let logo = text(char::from(Icon::Package))
+            .size(16)
             .font(LUCIDE_FONT)
             .color(STATUS_BLUE);
-        let logo_box = container(logo_icon)
-            .style(icon_box_style)
-            .padding(12)
-            .center_x(44)
-            .center_y(44);
+        let title = text("Provision").size(16);
+        let brand = row![logo, title]
+            .spacing(6)
+            .align_y(iced::Alignment::Center);
 
-        let title = text("Provision").size(24);
-        let subtitle = text("Select a profile to get started")
-            .size(14)
-            .color(MUTED_FG);
-
-        let heading_cluster = column![logo_box, title, subtitle]
-            .spacing(8)
-            .align_x(iced::Alignment::Center);
-
-        // System info banner
-        let si = &self.system_info;
-        let sys_icon = text(char::from(Icon::Monitor))
-            .size(14)
-            .font(LUCIDE_FONT)
-            .color(MUTED);
-        let sys_hostname = text(&si.hostname).size(13).color(TEXT);
-        let sys_details = text(format!(
-            "{} · {} · {:.0} GB RAM",
-            si.os_version, si.cpu_name, si.ram_gb
+        let sys_info_text = text(format!(
+            "{} · {} · {:.0} GB",
+            si.hostname, si.cpu_name, si.ram_gb
         ))
-        .size(12)
+        .size(9)
         .color(MUTED);
-        let sys_info_col = column![sys_hostname, sys_details].spacing(2);
-        let sys_banner = container(
-            row![sys_icon, sys_info_col]
-                .spacing(10)
-                .align_y(iced::Alignment::Center),
+
+        let hero_top = row![
+            brand,
+            iced::widget::Space::new().width(Length::Fill),
+            sys_info_text,
+        ]
+        .align_y(iced::Alignment::Center);
+
+        // Profile buttons
+        let profile_buttons: Vec<Element<'_, Message>> = Profile::ALL
+            .iter()
+            .map(|&p| {
+                let icon = text(p.icon()).size(12).font(LUCIDE_FONT);
+                let label = text(p.title()).size(11);
+                let content = row![icon, label]
+                    .spacing(6)
+                    .align_y(iced::Alignment::Center);
+
+                button(
+                    container(content)
+                        .center_x(Length::Fill)
+                        .center_y(Length::Fill)
+                        .padding([8, 4]),
+                )
+                .on_press(Message::ProfileSelected(p))
+                .width(Length::Fill)
+                .style(hero_profile_button_style)
+                .into()
+            })
+            .collect();
+
+        let profile_row = iced::widget::Row::with_children(profile_buttons)
+            .spacing(8)
+            .width(Length::Fill);
+
+        let hero = container(
+            column![hero_top, profile_row]
+                .spacing(12)
+                .width(Length::Fill),
         )
-        .padding([10, 14])
+        .padding(16)
         .width(Length::Fill)
-        .style(icon_box_style);
+        .style(hero_card_style);
 
-        // Profile cards — top row: Personal + Work; bottom row: Manual (full width)
-        let [a, b, c] = Profile::ALL.map(|p| profile_card(p, self.selected_profile));
+        // ── Section 2: Update Banner ────────────────────────────
+        let update_count = self.update_scan.packages.len();
+        let scan_done = self.update_scan.done;
 
-        let top_row = row![a, b].spacing(10).width(Length::Fill);
-        let bottom_row = row![c].spacing(10).width(Length::Fill);
+        let count_display: Element<'_, Message> = if scan_done {
+            if update_count > 0 {
+                text(format!("{update_count}"))
+                    .size(28)
+                    .color(STATUS_GREEN)
+                    .into()
+            } else {
+                text(char::from(Icon::CircleCheck))
+                    .size(24)
+                    .font(LUCIDE_FONT)
+                    .color(STATUS_GREEN)
+                    .into()
+            }
+        } else {
+            text("\u{2014}").size(28).color(MUTED).into()
+        };
 
-        let grid = column![top_row, bottom_row].spacing(10).width(Length::Fill);
+        let update_label: Element<'_, Message> = if scan_done && update_count == 0 {
+            text("All up to date").size(12).color(TEXT).into()
+        } else if scan_done {
+            text("Updates available").size(12).color(TEXT).into()
+        } else {
+            text("Scan to check for updates")
+                .size(12)
+                .color(MUTED_FG)
+                .into()
+        };
 
-        // Divider
-        let divider = container(iced::widget::Space::new().height(1))
-            .style(divider_style)
-            .width(Length::Fill)
-            .height(1);
+        let installed_count = self.installed_map.len();
+        let catalog_count = self.catalog.len();
+        let stats_text = if !self.installed_scan_done && installed_count == 0 {
+            "Scanning installed...".to_string()
+        } else {
+            format!("{installed_count} installed · {catalog_count} in catalog")
+        };
+        let stats_line = text(stats_text).size(10).color(MUTED_FG);
 
-        // Action cards
-        let update_card = action_card(
-            Icon::RefreshCw,
-            "Check for updates",
-            Some(Message::StartUpdateScan),
-        );
+        let update_info = column![update_label, stats_line].spacing(2);
 
+        let scan_btn = button(text("Scan").size(11))
+            .on_press(Message::StartUpdateScan)
+            .style(scan_button_style)
+            .padding([7, 16]);
+
+        let update_banner = container(
+            row![
+                count_display,
+                update_info,
+                iced::widget::Space::new().width(Length::Fill),
+                scan_btn,
+            ]
+            .spacing(16)
+            .align_y(iced::Alignment::Center)
+            .width(Length::Fill),
+        )
+        .padding(16)
+        .width(Length::Fill)
+        .style(|_theme: &Theme| container::Style {
+            background: Some(iced::Background::Color(CARD_BG)),
+            border: iced::Border {
+                color: BORDER,
+                width: 1.0,
+                radius: 8.0.into(),
+            },
+            ..Default::default()
+        });
+
+        // ── Section 3: Tool Tiles ───────────────────────────────
         let uninstall_msg = if self.installed_scan_done && !self.installed_packages.is_empty() {
             Some(Message::GoToUninstall)
         } else {
             None
         };
-        let uninstall_card = action_card(Icon::Trash2, "Uninstall packages", uninstall_msg);
 
-        let settings_card = action_card(Icon::Settings, "Settings", Some(Message::OpenSettings));
+        let tile_uninstall = tool_tile(Icon::Trash2, "Uninstall", STATUS_RED, uninstall_msg);
+        let tile_search = tool_tile(
+            Icon::Search,
+            "Search",
+            STATUS_AMBER,
+            Some(Message::GoToWingetSearch),
+        );
+        let tile_repos = tool_tile(
+            Icon::Github,
+            "Repos",
+            REPOS_PURPLE,
+            Some(Message::GoToGitHubLogin),
+        );
 
-        // Catalog source indicator
+        let tiles = row![tile_uninstall, tile_search, tile_repos]
+            .spacing(8)
+            .width(Length::Fill);
+
+        // ── Footer ──────────────────────────────────────────────
         let pkg_count = self.catalog.len();
         let catalog_color = if self.catalog_source == CatalogSource::Remote {
             STATUS_GREEN
@@ -110,37 +196,33 @@ impl App {
         };
         let catalog_status = status_indicator(Icon::Package, catalog_label, catalog_color);
 
-        // Scan status
-        let scan_status = if self.installed_scan_done {
-            let count = self.installed_map.len();
-            status_indicator(Icon::Check, format!("{count} packages detected"), MUTED)
-        } else {
-            spinner_indicator(
-                self.spinner_frame,
-                "Scanning installed packages...".into(),
-                MUTED,
-            )
-        };
-
         let version_label = text(format!("v{}", env!("CARGO_PKG_VERSION")))
-            .size(12)
+            .size(9)
             .color(MUTED);
 
-        let status_row = row![
+        let settings_icon = button(
+            text(char::from(Icon::Settings))
+                .size(13)
+                .font(LUCIDE_FONT)
+                .color(MUTED),
+        )
+        .on_press(Message::OpenSettings)
+        .style(ghost_button_style)
+        .padding([2, 4]);
+
+        let footer = row![
             catalog_status,
             iced::widget::Space::new().width(Length::Fill),
             version_label,
-            scan_status,
+            settings_icon,
         ]
-        .spacing(12)
+        .spacing(8)
         .align_y(iced::Alignment::Center);
 
-        let mut content = column![heading_cluster, sys_banner, grid, divider]
-            .spacing(14)
-            .align_x(iced::Alignment::Center)
-            .max_width(500);
+        // ── Assemble ────────────────────────────────────────────
+        let mut content = column![hero].spacing(10).max_width(500);
 
-        // Update available banner
+        // Update version banner (between hero and update banner)
         if let Some(release) = &self.latest_release {
             let banner_icon = text(char::from(Icon::CircleArrowUp))
                 .size(15)
@@ -179,21 +261,7 @@ impl App {
             content = content.push(banner);
         }
 
-        let search_card = action_card(
-            Icon::Search,
-            "Search winget",
-            Some(Message::GoToWingetSearch),
-        );
-
-        let github_card = action_card(Icon::Github, "Clone repos", Some(Message::GoToGitHubLogin));
-
-        let content = content
-            .push(update_card)
-            .push(uninstall_card)
-            .push(search_card)
-            .push(github_card)
-            .push(settings_card)
-            .push(status_row);
+        let content = content.push(update_banner).push(tiles).push(footer);
 
         container(content)
             .center_x(Length::Fill)
@@ -2247,6 +2315,47 @@ fn action_card(icon: Icon, label: &str, on_press: Option<Message>) -> Element<'_
     if let Some(msg) = on_press {
         btn = btn.on_press(msg);
     }
+    btn.into()
+}
+
+/// Tool tile: icon circle + label, used on the dashboard home screen.
+fn tool_tile<'a>(
+    icon: Icon,
+    label: &'a str,
+    color: iced::Color,
+    on_press: Option<Message>,
+) -> Element<'a, Message> {
+    let icon_bg = container(
+        text(char::from(icon))
+            .size(14)
+            .font(LUCIDE_FONT)
+            .color(color),
+    )
+    .width(32)
+    .height(32)
+    .center_x(32)
+    .center_y(32)
+    .style(move |_theme: &Theme| container::Style {
+        background: Some(iced::Background::Color(tinted_icon_bg(color))),
+        border: iced::Border {
+            radius: 8.0.into(),
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+
+    let content = column![icon_bg, text(label).size(11)]
+        .spacing(8)
+        .align_x(iced::Alignment::Center);
+
+    let mut btn = button(container(content).padding([18, 10]).center_x(Length::Fill))
+        .width(Length::Fill)
+        .style(tool_tile_style);
+
+    if let Some(msg) = on_press {
+        btn = btn.on_press(msg);
+    }
+
     btn.into()
 }
 
