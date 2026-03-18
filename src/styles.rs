@@ -200,23 +200,17 @@ pub fn tab_style(_theme: &Theme, status: button::Status, active: bool) -> button
     }
 }
 
+const RED_HOVER: Color = Color::from_rgb(
+    0xdc as f32 / 255.0,
+    0x26 as f32 / 255.0,
+    0x26 as f32 / 255.0,
+); // red-600
+
 /// Red-accent button for destructive actions (uninstall).
 pub fn danger_button_style(_theme: &Theme, status: button::Status) -> button::Style {
     let (bg, text_color, border_color) = match status {
         button::Status::Active => (STATUS_RED, TEXT, STATUS_RED),
-        button::Status::Hovered => (
-            Color::from_rgb(
-                0xdc as f32 / 255.0,
-                0x26 as f32 / 255.0,
-                0x26 as f32 / 255.0,
-            ),
-            TEXT,
-            Color::from_rgb(
-                0xdc as f32 / 255.0,
-                0x26 as f32 / 255.0,
-                0x26 as f32 / 255.0,
-            ),
-        ),
+        button::Status::Hovered => (RED_HOVER, TEXT, RED_HOVER),
         _ => (STATUS_RED, TEXT, STATUS_RED),
     };
 
@@ -268,6 +262,18 @@ pub fn card_container_style(_theme: &Theme) -> container::Style {
             color: BORDER,
             width: 1.0,
             radius: 8.0.into(),
+        },
+        ..Default::default()
+    }
+}
+
+/// Subtle highlight for selected/checked rows in scrollable lists.
+pub fn selected_row_style(_theme: &Theme) -> container::Style {
+    container::Style {
+        background: Some(Background::Color(CARD_BG)),
+        border: Border {
+            radius: 6.0.into(),
+            ..Default::default()
         },
         ..Default::default()
     }

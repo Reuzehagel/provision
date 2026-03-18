@@ -26,6 +26,13 @@ use upgrade::UpgradeablePackage;
 pub(crate) const SPINNER_FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 pub(crate) const SEARCH_INPUT_ID: &str = "search_input";
 
+/// Toggle a single item in a `HashSet`: insert if absent, remove if present.
+fn toggle_one(set: &mut HashSet<String>, id: String) {
+    if !set.remove(&id) {
+        set.insert(id);
+    }
+}
+
 impl App {
     fn clear_search(&mut self) {
         self.search.clear();
@@ -609,9 +616,7 @@ impl App {
             Message::StartWingetSearch => self.handle_start_winget_search(),
             Message::WingetSearchProgress(e) => self.handle_winget_search_progress(e),
             Message::ToggleWingetSearchPackage(id) => {
-                if !self.winget_search_selected.remove(&id) {
-                    self.winget_search_selected.insert(id);
-                }
+                toggle_one(&mut self.winget_search_selected, id);
                 Task::none()
             }
             Message::StartWingetSearchInstall => self.handle_start_winget_search_install(),
@@ -694,15 +699,11 @@ impl App {
             Message::FocusSearch => self.handle_focus_search(),
             // ── Inline one-liners ────────────────────────────────────
             Message::TogglePackage(id) => {
-                if !self.selected.remove(&id) {
-                    self.selected.insert(id);
-                }
+                toggle_one(&mut self.selected, id);
                 Task::none()
             }
             Message::ToggleUpgradePackage(id) => {
-                if !self.update_scan.selected.remove(&id) {
-                    self.update_scan.selected.insert(id);
-                }
+                toggle_one(&mut self.update_scan.selected, id);
                 Task::none()
             }
             Message::SearchChanged(v) => {
@@ -804,7 +805,8 @@ impl App {
     ) -> Task<Message> {
         match event {
             upgrade::InstalledScanProgress::Activity { .. } => {}
-            upgrade::InstalledScanProgress::Completed { packages } => {
+            upgrade::InstalledScanProgress::Completed { mut packages } => {
+                packages.sort_by(|a, b| a.name_lower.cmp(&b.name_lower));
                 self.installed_map = packages
                     .iter()
                     .map(|p| (p.winget_id_lower.clone(), p.version.clone()))
@@ -1051,9 +1053,7 @@ impl App {
     }
 
     fn handle_toggle_uninstall_package(&mut self, winget_id_lower: String) -> Task<Message> {
-        if !self.uninstall_selected.remove(&winget_id_lower) {
-            self.uninstall_selected.insert(winget_id_lower);
-        }
+        toggle_one(&mut self.uninstall_selected, winget_id_lower);
         Task::none()
     }
 
@@ -1104,14 +1104,8 @@ impl App {
         Task::none()
     }
 
-    fn handle_finish_uninstall_and_reset(&mut self) -> Task<Message> {
-        self.clear_search();
-        self.uninstall_selected.clear();
-        self.uninstall_queue.clear();
-        self.uninstall = ProgressState::default();
-        self.screen = Screen::ProfileSelect;
-
-        // Re-scan installed packages
+    /// Kick off a fresh installed-packages scan, returning the Task to drive it.
+    fn start_installed_rescan(&mut self) -> Task<Message> {
         let (task, handle) = Task::run(
             upgrade::scan_installed(self.dry_run),
             Message::InstalledScanProgress,
@@ -1120,6 +1114,15 @@ impl App {
         self.installed_scan_done = false;
         self._installed_scan_handle = Some(handle.abort_on_drop());
         task
+    }
+
+    fn handle_finish_uninstall_and_reset(&mut self) -> Task<Message> {
+        self.clear_search();
+        self.uninstall_selected.clear();
+        self.uninstall_queue.clear();
+        self.uninstall = ProgressState::default();
+        self.screen = Screen::ProfileSelect;
+        self.start_installed_rescan()
     }
 
     fn handle_size_scan_result(&mut self, sizes: Vec<(String, u64)>) -> Task<Message> {
@@ -1238,15 +1241,7 @@ impl App {
         self.winget_search_selected.clear();
         self.screen = Screen::WingetSearch;
 
-        // Re-scan installed packages so installed_map stays current
-        let (scan_task, handle) = Task::run(
-            upgrade::scan_installed(self.dry_run),
-            Message::InstalledScanProgress,
-        )
-        .abortable();
-        self.installed_scan_done = false;
-        self._installed_scan_handle = Some(handle.abort_on_drop());
-
+        let scan_task = self.start_installed_rescan();
         let focus_task = widget::operation::focus(widget::Id::new(SEARCH_INPUT_ID));
         Task::batch([scan_task, focus_task])
     }

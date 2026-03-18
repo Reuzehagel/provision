@@ -29,8 +29,21 @@ pub async fn scan_sizes(packages: Vec<InstalledPackage>) -> Vec<(String, u64)> {
 fn scan_sizes_blocking(packages: &[InstalledPackage]) -> Vec<(String, u64)> {
     use windows_sys::Win32::System::Registry::*;
 
+    // Build a name→index map for O(1) exact-match lookup
+    let name_map: std::collections::HashMap<&str, usize> = packages
+        .iter()
+        .enumerate()
+        .map(|(i, p)| (p.name_lower.as_str(), i))
+        .collect();
+
+    // Precompute the lowercased last segment of each winget_id for fuzzy matching
+    let id_segments: Vec<String> = packages
+        .iter()
+        .map(|p| p.winget_id.rsplit('.').next().unwrap_or("").to_lowercase())
+        .collect();
+
     let mut results = Vec::new();
-    let mut matched: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut matched: std::collections::HashSet<usize> = std::collections::HashSet::new();
 
     let reg_paths: &[(&str, HKEY)] = &[
         (
@@ -51,22 +64,23 @@ fn scan_sizes_blocking(packages: &[InstalledPackage]) -> Vec<(String, u64)> {
         if let Some(entries) = read_uninstall_key(hive, subkey) {
             for (display_name, size_kb) in entries {
                 let display_lower = display_name.to_lowercase();
-                for pkg in packages {
-                    if matched.contains(&pkg.winget_id_lower) {
+
+                // Try exact name match first (O(1))
+                if let Some(&idx) = name_map.get(display_lower.as_str()) {
+                    if matched.insert(idx) {
+                        results.push((packages[idx].winget_id_lower.clone(), size_kb * 1024));
+                    }
+                    continue;
+                }
+
+                // Fall back to fuzzy id-segment match
+                for (idx, seg) in id_segments.iter().enumerate() {
+                    if matched.contains(&idx) || seg.len() < 3 {
                         continue;
                     }
-                    if display_lower == pkg.name_lower {
-                        results.push((pkg.winget_id_lower.clone(), size_kb * 1024));
-                        matched.insert(pkg.winget_id_lower.clone());
-                        break;
-                    }
-                    let id_segment = pkg.winget_id.rsplit('.').next().unwrap_or("");
-                    if !id_segment.is_empty()
-                        && id_segment.len() >= 3
-                        && display_lower.contains(&id_segment.to_lowercase())
-                    {
-                        results.push((pkg.winget_id_lower.clone(), size_kb * 1024));
-                        matched.insert(pkg.winget_id_lower.clone());
+                    if display_lower.contains(seg.as_str()) {
+                        results.push((packages[idx].winget_id_lower.clone(), size_kb * 1024));
+                        matched.insert(idx);
                         break;
                     }
                 }

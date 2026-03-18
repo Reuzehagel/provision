@@ -327,51 +327,29 @@ pub fn scan_installed(dry_run: bool) -> impl futures::Stream<Item = InstalledSca
 }
 
 pub fn parse_list_table(lines: &[String]) -> Vec<InstalledPackage> {
-    let header_idx = lines
-        .iter()
-        .position(|l| l.contains("Name") && l.contains("Id") && l.contains("Version"));
-
-    let Some(header_idx) = header_idx else {
+    let base = &["Name", "Id", "Version"];
+    let Some(t) = WingetTable::detect(lines, base, &[]) else {
         return Vec::new();
     };
-
-    let header = &lines[header_idx];
-
-    let Some(id_col) = header.find("Id") else {
-        return Vec::new();
-    };
-    let Some(version_col) = header.find("Version") else {
-        return Vec::new();
-    };
-
-    let name_col = header.find("Name").unwrap_or(0);
-    let version_end = header.find("Source").unwrap_or(usize::MAX);
-    let data_start = find_data_start(lines, header_idx);
+    let [name_col, id_col, version_col] = [t.cols[0], t.cols[1], t.cols[2]];
+    let source_col = WingetTable::find_optional(lines, base, "Source").unwrap_or(usize::MAX);
 
     let mut packages = Vec::new();
-
-    for line in &lines[data_start..] {
+    for line in &lines[t.data_start..] {
         if line.len() < version_col + 1 {
             continue;
         }
-
         let name = safe_slice(line, name_col, id_col);
         let id = safe_slice(line, id_col, version_col);
-        let version = if version_end < usize::MAX {
-            safe_slice(line, version_col, version_end)
-        } else {
-            safe_slice_to_end(line, version_col)
-        };
-        let source = if version_end < usize::MAX && line.len() > version_end {
-            safe_slice_to_end(line, version_end)
+        let version = WingetTable::col(line, version_col, source_col);
+        let source = if source_col < usize::MAX && line.len() > source_col {
+            safe_slice_to_end(line, source_col)
         } else {
             String::new()
         };
-
         if id.is_empty() {
             continue;
         }
-
         packages.push(InstalledPackage {
             name_lower: name.to_lowercase(),
             winget_id_lower: id.to_lowercase(),
@@ -382,7 +360,6 @@ pub fn parse_list_table(lines: &[String]) -> Vec<InstalledPackage> {
             size_bytes: None,
         });
     }
-
     packages
 }
 
@@ -474,42 +451,22 @@ pub fn scan_upgrades(
 }
 
 pub fn parse_upgrade_table(lines: &[String]) -> Vec<UpgradeablePackage> {
-    let header_idx = lines.iter().position(|l| {
-        l.contains("Name") && l.contains("Id") && l.contains("Version") && l.contains("Available")
-    });
-
-    let Some(header_idx) = header_idx else {
+    let base = &["Name", "Id", "Version", "Available"];
+    let Some(t) = WingetTable::detect(lines, base, &[]) else {
         return Vec::new();
     };
-
-    let header = &lines[header_idx];
-
-    let Some(name_col) = header.find("Name") else {
-        return Vec::new();
-    };
-    let Some(id_col) = header.find("Id") else {
-        return Vec::new();
-    };
-    let Some(version_col) = header.find("Version") else {
-        return Vec::new();
-    };
-    let Some(available_col) = header.find("Available") else {
-        return Vec::new();
-    };
-    let source_col = header.find("Source");
-    let data_start = find_data_start(lines, header_idx);
+    let [name_col, id_col, version_col, available_col] =
+        [t.cols[0], t.cols[1], t.cols[2], t.cols[3]];
+    let source_col = WingetTable::find_optional(lines, base, "Source");
 
     let mut packages = Vec::new();
-
-    for line in &lines[data_start..] {
+    for line in &lines[t.data_start..] {
         if line.contains("upgrades available") || line.contains("upgrade(s) available") {
             continue;
         }
-
         if line.len() < available_col + 1 {
             continue;
         }
-
         let name = safe_slice(line, name_col, id_col);
         let id = safe_slice(line, id_col, version_col);
         let version = safe_slice(line, version_col, available_col);
@@ -521,72 +478,41 @@ pub fn parse_upgrade_table(lines: &[String]) -> Vec<UpgradeablePackage> {
         } else {
             (safe_slice_to_end(line, available_col), String::new())
         };
-
         if id.is_empty() || available.is_empty() {
             continue;
         }
-
-        let name_lower = name.to_lowercase();
-        let winget_id_lower = id.to_lowercase();
         packages.push(UpgradeablePackage {
+            name_lower: name.to_lowercase(),
+            winget_id_lower: id.to_lowercase(),
             name,
             winget_id: id,
             current_version: version,
             available_version: available,
             source,
-            name_lower,
-            winget_id_lower,
         });
     }
-
     packages
 }
 
 pub fn parse_search_table(lines: &[String]) -> Vec<SearchPackage> {
-    let header_idx = lines
-        .iter()
-        .position(|l| l.contains("Name") && l.contains("Id") && l.contains("Version"));
-
-    let Some(header_idx) = header_idx else {
+    let base = &["Name", "Id", "Version"];
+    let Some(t) = WingetTable::detect(lines, base, &[]) else {
         return Vec::new();
     };
-
-    let header = &lines[header_idx];
-
-    let Some(name_col) = header.find("Name") else {
-        return Vec::new();
-    };
-    let Some(id_col) = header.find("Id") else {
-        return Vec::new();
-    };
-    let Some(version_col) = header.find("Version") else {
-        return Vec::new();
-    };
-
+    let [name_col, id_col, version_col] = [t.cols[0], t.cols[1], t.cols[2]];
     // "Match" column is optional — only present for partial matches
-    let match_col = header.find("Match");
-    let source_col = header.find("Source");
-
-    // Version ends at Match if present, otherwise at Source, otherwise end of line
+    let match_col = WingetTable::find_optional(lines, base, "Match");
+    let source_col = WingetTable::find_optional(lines, base, "Source");
     let version_end = match_col.or(source_col).unwrap_or(usize::MAX);
 
-    let data_start = find_data_start(lines, header_idx);
-
     let mut packages = Vec::new();
-
-    for line in &lines[data_start..] {
+    for line in &lines[t.data_start..] {
         if line.len() < version_col + 1 {
             continue;
         }
-
         let name = safe_slice(line, name_col, id_col);
         let id = safe_slice(line, id_col, version_col);
-        let version = if version_end < usize::MAX {
-            safe_slice(line, version_col, version_end)
-        } else {
-            safe_slice_to_end(line, version_col)
-        };
-
+        let version = WingetTable::col(line, version_col, version_end);
         let source = if let Some(sc) = source_col {
             if line.len() > sc {
                 safe_slice_to_end(line, sc)
@@ -596,11 +522,9 @@ pub fn parse_search_table(lines: &[String]) -> Vec<SearchPackage> {
         } else {
             String::new()
         };
-
         if id.is_empty() {
             continue;
         }
-
         packages.push(SearchPackage {
             name_lower: name.to_lowercase(),
             winget_id_lower: id.to_lowercase(),
@@ -610,8 +534,53 @@ pub fn parse_search_table(lines: &[String]) -> Vec<SearchPackage> {
             source,
         });
     }
-
     packages
+}
+
+// ── Generic winget table parser ──────────────────────────────
+
+/// Column positions parsed from a winget table header.
+struct WingetTable {
+    /// Byte offset of each detected column, in the order requested.
+    cols: Vec<usize>,
+    /// Index of the first data row (past header + separator).
+    data_start: usize,
+}
+
+impl WingetTable {
+    /// Detect column positions from `lines`. `required` columns must all be
+    /// present in the header; `optional` columns may be absent (`None`).
+    /// Returns `None` if the header or any required column is missing.
+    fn detect(lines: &[String], required: &[&str], extra_required: &[&str]) -> Option<Self> {
+        let header_idx = lines.iter().position(|l| {
+            required.iter().all(|c| l.contains(c)) && extra_required.iter().all(|c| l.contains(c))
+        })?;
+        let header = &lines[header_idx];
+        let mut cols = Vec::with_capacity(required.len());
+        for &name in required {
+            cols.push(header.find(name)?);
+        }
+        let data_start = find_data_start(lines, header_idx);
+        Some(Self { cols, data_start })
+    }
+
+    /// Find an optional column in the original header line.
+    fn find_optional(lines: &[String], required: &[&str], col_name: &str) -> Option<usize> {
+        let header_idx = lines
+            .iter()
+            .position(|l| required.iter().all(|c| l.contains(c)))?;
+        lines[header_idx].find(col_name)
+    }
+
+    /// Slice a column value from a data row. `end` may be `usize::MAX` to
+    /// slice to end-of-line.
+    fn col(line: &str, start: usize, end: usize) -> String {
+        if end < usize::MAX {
+            safe_slice(line, start, end)
+        } else {
+            safe_slice_to_end(line, start)
+        }
+    }
 }
 
 /// Find the first data row after the header, skipping any separator line (dashes).

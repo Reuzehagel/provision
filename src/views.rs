@@ -18,8 +18,8 @@ use crate::styles::{
     STATUS_GREEN, STATUS_RED, TERMINAL_TEXT, TEXT, browser_badge_style, cancel_button_style,
     card_container_style, continue_button_style, danger_button_style, ghost_button_style,
     hero_card_style, hero_profile_button_style, installed_badge_style, package_checkbox_style,
-    scan_button_style, tab_style, terminal_box_style, tinted_icon_bg, tool_tile_style,
-    update_banner_style, warning_badge_style,
+    scan_button_style, selected_row_style, tab_style, terminal_box_style, tinted_icon_bg,
+    tool_tile_style, update_banner_style, warning_badge_style,
 };
 use crate::{App, LogBuffer, Message, ProgressState};
 
@@ -969,7 +969,7 @@ impl App {
 
         let search_lower = self.search_lower.as_str();
 
-        let mut filtered: Vec<&crate::upgrade::InstalledPackage> = self
+        let filtered: Vec<&crate::upgrade::InstalledPackage> = self
             .installed_packages
             .iter()
             .filter(|p| {
@@ -978,7 +978,6 @@ impl App {
                     || p.winget_id_lower.contains(search_lower)
             })
             .collect();
-        filtered.sort_by(|a, b| a.name_lower.cmp(&b.name_lower));
 
         let total = self.installed_packages.len();
         let shown = filtered.len();
@@ -1036,14 +1035,7 @@ impl App {
 
             let row_el: Element<'_, Message> = if is_checked {
                 container(pkg_row)
-                    .style(|_: &_| container::Style {
-                        background: Some(iced::Background::Color(CARD_BG)),
-                        border: iced::Border {
-                            radius: 6.0.into(),
-                            ..Default::default()
-                        },
-                        ..Default::default()
-                    })
+                    .style(selected_row_style)
                     .width(Length::Fill)
                     .into()
             } else {
@@ -1648,14 +1640,7 @@ impl App {
 
                 let row_el: Element<'_, Message> = if is_queued {
                     container(repo_row)
-                        .style(|_: &_| container::Style {
-                            background: Some(iced::Background::Color(CARD_BG)),
-                            border: iced::Border {
-                                radius: 6.0.into(),
-                                ..Default::default()
-                            },
-                            ..Default::default()
-                        })
+                        .style(selected_row_style)
                         .width(Length::Fill)
                         .into()
                 } else {
@@ -1836,14 +1821,7 @@ impl App {
 
             list = list.push(
                 container(item_row)
-                    .style(|_: &_| container::Style {
-                        background: Some(iced::Background::Color(CARD_BG)),
-                        border: iced::Border {
-                            radius: 6.0.into(),
-                            ..Default::default()
-                        },
-                        ..Default::default()
-                    })
+                    .style(selected_row_style)
                     .width(Length::Fill),
             );
         }
