@@ -166,7 +166,7 @@ After each successful clone, scan the repo root directory for these filenames (i
 
 If exactly one is found, prompt "Run `<script>`?". If multiple, let the user pick from a list. If none, proceed silently to the next clone.
 
-Scripts run via `tokio::process::Command` in the cloned repo's directory with `CREATE_NO_WINDOW`.
+Scripts run via `tokio::process::Command` in the cloned repo's directory with `CREATE_NO_WINDOW`. Interpreter selection: `.ps1` files run via `powershell.exe -ExecutionPolicy Bypass -File <script>`, `.sh` files via `bash <script>`, `Makefile` via `make`.
 
 ## New File
 
