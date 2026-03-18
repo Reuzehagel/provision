@@ -341,6 +341,18 @@ pub(crate) struct App {
     pub(crate) winget_search_queue: Vec<upgrade::SearchPackage>,
     pub(crate) winget_search_install: ProgressState,
     pub(crate) _winget_search_handle: Option<task::Handle>,
+    // GitHub clone state
+    pub(crate) github_token: Option<String>,
+    pub(crate) github_user_code: Option<String>,
+    pub(crate) github_verification_uri: Option<String>,
+    pub(crate) github_polling: bool,
+    pub(crate) github_auth_error: Option<String>,
+    pub(crate) github_repos: Vec<github::GitHubRepo>,
+    pub(crate) github_repos_loading: bool,
+    pub(crate) github_clone_queue: Vec<github::CloneItem>,
+    pub(crate) github_clone: ProgressState,
+    pub(crate) github_bootstrap_items: Vec<github::BootstrapItem>,
+    pub(crate) _github_device_flow_handle: Option<task::Handle>,
 }
 
 impl App {
@@ -407,6 +419,17 @@ impl App {
                 winget_search_queue: Vec::new(),
                 winget_search_install: ProgressState::default(),
                 _winget_search_handle: None,
+                github_token: None,
+                github_user_code: None,
+                github_verification_uri: None,
+                github_polling: false,
+                github_auth_error: None,
+                github_repos: Vec::new(),
+                github_repos_loading: false,
+                github_clone_queue: Vec::new(),
+                github_clone: ProgressState::default(),
+                github_bootstrap_items: Vec::new(),
+                _github_device_flow_handle: None,
             },
             Task::batch([scan_task, catalog_task, version_task]),
         )
@@ -429,6 +452,10 @@ pub(crate) enum Screen {
     Uninstalling,
     WingetSearch,
     WingetSearchInstalling,
+    GitHubLogin,
+    GitHubRepos,
+    GitHubCloning,
+    GitHubBootstrap,
 }
 
 #[derive(Debug, Clone)]
@@ -492,6 +519,31 @@ pub(crate) enum Message {
     WingetSearchInstallProgress(install::InstallProgress),
     FinishWingetSearchInstall,
     SelectAllWingetSearch,
+    #[allow(dead_code)]
+    GoToGitHubLogin,
+    GitHubDeviceFlowProgress(github::DeviceFlowProgress),
+    GitHubReposFetched(Result<Vec<github::GitHubRepo>, String>),
+    #[allow(dead_code)]
+    GitHubSelectFolder(String),
+    GitHubFolderPicked(String, std::path::PathBuf),
+    #[allow(dead_code)]
+    GitHubRemoveFromQueue(String),
+    #[allow(dead_code)]
+    StartGitHubClone,
+    #[allow(dead_code)]
+    CancelGitHubClone,
+    GitHubCloneProgress(install::InstallProgress),
+    #[allow(dead_code)]
+    FinishGitHubClone,
+    #[allow(dead_code)]
+    GitHubRunBootstrap(usize, String),
+    #[allow(dead_code)]
+    GitHubSkipBootstrap(usize),
+    GitHubBootstrapDone(usize, Result<String, String>),
+    #[allow(dead_code)]
+    FinishGitHubBootstrap,
+    #[allow(dead_code)]
+    OpenGitHubUrl,
     KeyConfirm,
     KeyEscape,
     FocusSearch,
@@ -569,6 +621,60 @@ impl App {
             }
             Message::FinishWingetSearchInstall => self.handle_finish_winget_search_install(),
             Message::SelectAllWingetSearch => self.handle_select_all_winget_search(),
+            Message::GoToGitHubLogin => self.handle_go_to_github_login(),
+            Message::GitHubDeviceFlowProgress(e) => self.handle_github_device_flow_progress(e),
+            Message::GitHubReposFetched(r) => self.handle_github_repos_fetched(r),
+            Message::GitHubSelectFolder(full_name) => self.handle_github_select_folder(full_name),
+            Message::GitHubFolderPicked(full_name, path) => {
+                self.github_clone_queue.push(github::CloneItem {
+                    repo: self
+                        .github_repos
+                        .iter()
+                        .find(|r| r.full_name == full_name)
+                        .cloned()
+                        .expect("repo must exist"),
+                    destination: path,
+                });
+                Task::none()
+            }
+            Message::GitHubRemoveFromQueue(full_name) => {
+                self.github_clone_queue
+                    .retain(|item| item.repo.full_name != full_name);
+                Task::none()
+            }
+            Message::StartGitHubClone => self.handle_start_github_clone(),
+            Message::CancelGitHubClone => self.handle_cancel_github_clone(),
+            Message::GitHubCloneProgress(e) => self.handle_github_clone_progress(e),
+            Message::FinishGitHubClone => self.handle_finish_github_clone(),
+            Message::GitHubRunBootstrap(idx, script) => {
+                self.handle_github_run_bootstrap(idx, script)
+            }
+            Message::GitHubSkipBootstrap(idx) => {
+                if let Some(item) = self.github_bootstrap_items.get_mut(idx) {
+                    item.status = github::BootstrapStatus::Skipped;
+                }
+                Task::none()
+            }
+            Message::GitHubBootstrapDone(idx, result) => {
+                if let Some(item) = self.github_bootstrap_items.get_mut(idx) {
+                    match result {
+                        Ok(_) => item.status = github::BootstrapStatus::Done,
+                        Err(e) => item.status = github::BootstrapStatus::Failed(e),
+                    }
+                }
+                Task::none()
+            }
+            Message::FinishGitHubBootstrap => {
+                self.github_bootstrap_items.clear();
+                self.screen = Screen::GitHubRepos;
+                Task::none()
+            }
+            Message::OpenGitHubUrl => {
+                if let Some(ref uri) = self.github_verification_uri {
+                    github::open_url(uri);
+                }
+                Task::none()
+            }
             Message::ToggleCategory(cat) => self.handle_toggle_category(cat),
             Message::SelectAll => self.handle_select_all(),
             Message::ExportSelection => self.handle_export_selection(),
@@ -1143,6 +1249,161 @@ impl App {
         Task::none()
     }
 
+    // ── GitHub clone flow ────────────────────────────────────
+
+    fn handle_go_to_github_login(&mut self) -> Task<Message> {
+        self.github_token = None;
+        self.github_user_code = None;
+        self.github_verification_uri = None;
+        self.github_auth_error = None;
+        self.github_polling = true;
+        self.github_repos.clear();
+        self.github_clone_queue.clear();
+        self.clear_search();
+        self.screen = Screen::GitHubLogin;
+
+        let dry = self.dry_run;
+        let (task, handle) =
+            Task::run(github::device_flow(dry), Message::GitHubDeviceFlowProgress).abortable();
+        self._github_device_flow_handle = Some(handle.abort_on_drop());
+        task
+    }
+
+    fn handle_github_device_flow_progress(
+        &mut self,
+        event: github::DeviceFlowProgress,
+    ) -> Task<Message> {
+        match event {
+            github::DeviceFlowProgress::CodeReady {
+                user_code,
+                verification_uri,
+            } => {
+                self.github_user_code = Some(user_code);
+                self.github_verification_uri = Some(verification_uri);
+            }
+            github::DeviceFlowProgress::Authenticated { token } => {
+                self.github_token = Some(token.clone());
+                self.github_polling = false;
+                self._github_device_flow_handle = None;
+                self.github_repos_loading = true;
+                self.screen = Screen::GitHubRepos;
+
+                let dry = self.dry_run;
+                return Task::perform(
+                    async move { github::fetch_repos(&token, dry).await },
+                    Message::GitHubReposFetched,
+                );
+            }
+            github::DeviceFlowProgress::Failed { error } => {
+                self.github_auth_error = Some(error);
+                self.github_polling = false;
+                self._github_device_flow_handle = None;
+            }
+        }
+        Task::none()
+    }
+
+    fn handle_github_repos_fetched(
+        &mut self,
+        result: Result<Vec<github::GitHubRepo>, String>,
+    ) -> Task<Message> {
+        self.github_repos_loading = false;
+        match result {
+            Ok(repos) => {
+                self.github_repos = repos;
+            }
+            Err(e) => {
+                self.github_auth_error = Some(e);
+            }
+        }
+        Task::none()
+    }
+
+    fn handle_github_select_folder(&mut self, full_name: String) -> Task<Message> {
+        Task::perform(
+            async {
+                let folder = rfd::AsyncFileDialog::new()
+                    .set_title("Select clone destination")
+                    .pick_folder()
+                    .await;
+                (full_name, folder)
+            },
+            |(full_name, folder)| {
+                if let Some(handle) = folder {
+                    Message::GitHubFolderPicked(full_name, handle.path().to_path_buf())
+                } else {
+                    Message::KeyIgnored
+                }
+            },
+        )
+    }
+
+    fn handle_start_github_clone(&mut self) -> Task<Message> {
+        if self.github_clone_queue.is_empty() {
+            return Task::none();
+        }
+
+        let queue = self.github_clone_queue.clone();
+        self.github_clone.start(queue.len());
+        self.screen = Screen::GitHubCloning;
+
+        let token = self.github_token.clone().unwrap_or_default();
+        let dry = self.dry_run;
+        let (task, handle) = Task::run(
+            github::clone_all(queue, token, dry),
+            Message::GitHubCloneProgress,
+        )
+        .abortable();
+
+        self.github_clone._handle = Some(handle.abort_on_drop());
+        task
+    }
+
+    fn handle_cancel_github_clone(&mut self) -> Task<Message> {
+        self.github_clone.cancel("Clone");
+        Task::none()
+    }
+
+    fn handle_github_clone_progress(&mut self, event: install::InstallProgress) -> Task<Message> {
+        let queue = &self.github_clone_queue;
+        self.github_clone.handle_event(event, |i| {
+            let name = queue
+                .get(i)
+                .map(|item| item.repo.name.as_str())
+                .unwrap_or("...");
+            format!("Cloning {name}")
+        });
+        Task::none()
+    }
+
+    fn handle_finish_github_clone(&mut self) -> Task<Message> {
+        let bootstrap_items = github::detect_bootstrap_scripts(&self.github_clone_queue);
+
+        self.github_clone = ProgressState::default();
+
+        if bootstrap_items.is_empty() {
+            self.github_clone_queue.clear();
+            self.screen = Screen::GitHubRepos;
+        } else {
+            self.github_bootstrap_items = bootstrap_items;
+            self.github_clone_queue.clear();
+            self.screen = Screen::GitHubBootstrap;
+        }
+        Task::none()
+    }
+
+    fn handle_github_run_bootstrap(&mut self, idx: usize, script: String) -> Task<Message> {
+        if let Some(item) = self.github_bootstrap_items.get_mut(idx) {
+            item.status = github::BootstrapStatus::Running;
+            let path = item.repo_path.clone();
+            return Task::perform(
+                async move { github::run_bootstrap(&path, &script).await },
+                move |result| Message::GitHubBootstrapDone(idx, result),
+            );
+        }
+        Task::none()
+    }
+
     // ── Selection ────────────────────────────────────────────────
 
     fn handle_toggle_category(&mut self, cat: String) -> Task<Message> {
@@ -1392,6 +1653,10 @@ impl App {
             Screen::Uninstalling => self.view_uninstalling(),
             Screen::WingetSearch => self.view_winget_search(),
             Screen::WingetSearchInstalling => self.view_winget_search_installing(),
+            Screen::GitHubLogin
+            | Screen::GitHubRepos
+            | Screen::GitHubCloning
+            | Screen::GitHubBootstrap => todo!("GitHub views not yet implemented"),
         }
     }
 

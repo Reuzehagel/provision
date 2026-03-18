@@ -72,13 +72,17 @@ struct RepoResponse {
 pub(crate) struct GitHubRepo {
     pub(crate) name: String,
     pub(crate) full_name: String,
+    #[allow(dead_code)]
     pub(crate) description: Option<String>,
+    #[allow(dead_code)]
     pub(crate) private: bool,
     pub(crate) clone_url: String,
     #[allow(dead_code)]
     pub(crate) html_url: String,
     // Precomputed for search filtering
+    #[allow(dead_code)]
     pub(crate) name_lower: String,
+    #[allow(dead_code)]
     pub(crate) desc_lower: String,
 }
 
@@ -107,8 +111,10 @@ pub(crate) struct CloneItem {
 
 #[derive(Debug, Clone)]
 pub(crate) struct BootstrapItem {
+    #[allow(dead_code)]
     pub(crate) repo_name: String,
     pub(crate) repo_path: PathBuf,
+    #[allow(dead_code)]
     pub(crate) scripts: Vec<String>,
     pub(crate) status: BootstrapStatus,
 }
