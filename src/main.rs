@@ -731,6 +731,7 @@ impl App {
                 self.install.copy_status = false;
                 self.upgrade.copy_status = false;
                 self.uninstall.copy_status = false;
+                self.github_clone.copy_status = false;
                 Task::none()
             }
             Message::SetInstallMode(mode) => {
@@ -861,6 +862,17 @@ impl App {
             }
             Screen::WingetSearch => {
                 self._winget_search_handle = None;
+                self.screen = Screen::ProfileSelect;
+            }
+            Screen::GitHubLogin => {
+                self._github_device_flow_handle = None;
+                self.github_polling = false;
+                self.screen = Screen::ProfileSelect;
+            }
+            Screen::GitHubRepos => {
+                self.github_token = None;
+                self.github_repos.clear();
+                self.github_clone_queue.clear();
                 self.screen = Screen::ProfileSelect;
             }
             Screen::UninstallReview => {
@@ -1516,6 +1528,7 @@ impl App {
             Screen::Updating => &mut self.upgrade,
             Screen::Uninstalling => &mut self.uninstall,
             Screen::WingetSearchInstalling => &mut self.winget_search_install,
+            Screen::GitHubCloning => &mut self.github_clone,
             _ => &mut self.install,
         };
         let (done, failed, cancelled) = state.status_counts();
@@ -1603,6 +1616,12 @@ impl App {
             Screen::WingetSearchInstalling if self.winget_search_install.done => {
                 self.handle_finish_winget_search_install()
             }
+            Screen::GitHubRepos if !self.github_clone_queue.is_empty() => {
+                self.handle_start_github_clone()
+            }
+            Screen::GitHubCloning if self.github_clone.done => {
+                self.handle_finish_github_clone()
+            }
             _ => Task::none(),
         }
     }
@@ -1624,6 +1643,18 @@ impl App {
             Screen::UpdateScanning if !self.update_scan.done => self.handle_cancel_update_scan(),
             Screen::Updating if !self.upgrade.done => self.handle_cancel_upgrade(),
             Screen::Uninstalling if !self.uninstall.done => self.handle_cancel_uninstall(),
+            Screen::GitHubLogin | Screen::GitHubRepos => self.handle_go_back(),
+            Screen::GitHubCloning if !self.github_clone.done => {
+                self.handle_cancel_github_clone()
+            }
+            Screen::GitHubCloning if self.github_clone.done => {
+                self.handle_finish_github_clone()
+            }
+            Screen::GitHubBootstrap => {
+                self.github_bootstrap_items.clear();
+                self.screen = Screen::GitHubRepos;
+                Task::none()
+            }
             _ => Task::none(),
         }
     }
@@ -1633,7 +1664,8 @@ impl App {
             Screen::PackageSelect
             | Screen::UpdateSelect
             | Screen::UninstallSelect
-            | Screen::WingetSearch => widget::operation::focus(widget::Id::new(SEARCH_INPUT_ID)),
+            | Screen::WingetSearch
+            | Screen::GitHubRepos => widget::operation::focus(widget::Id::new(SEARCH_INPUT_ID)),
             _ => Task::none(),
         }
     }
@@ -1682,7 +1714,11 @@ impl App {
             || matches!(self.screen, Screen::Updating if !self.upgrade.done)
             || matches!(self.screen, Screen::Uninstalling if !self.uninstall.done)
             || matches!(self.screen, Screen::WingetSearch if self.winget_search_scanning)
-            || matches!(self.screen, Screen::WingetSearchInstalling if !self.winget_search_install.done);
+            || matches!(self.screen, Screen::WingetSearchInstalling if !self.winget_search_install.done)
+            || matches!(self.screen, Screen::GitHubLogin if self.github_polling)
+            || matches!(self.screen, Screen::GitHubRepos if self.github_repos_loading)
+            || matches!(self.screen, Screen::GitHubCloning if !self.github_clone.done)
+            || matches!(self.screen, Screen::GitHubBootstrap if self.github_bootstrap_items.iter().any(|i| i.status == github::BootstrapStatus::Running));
 
         if spinner_active {
             Subscription::batch([
