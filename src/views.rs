@@ -16,10 +16,10 @@ use crate::github::BootstrapStatus;
 use crate::styles::{
     BORDER, CARD_BG, LUCIDE_FONT, MUTED, MUTED_FG, REPOS_PURPLE, STATUS_AMBER, STATUS_BLUE,
     STATUS_GREEN, STATUS_RED, TERMINAL_TEXT, TEXT, browser_badge_style, cancel_button_style,
-    card_style, continue_button_style, danger_button_style, ghost_button_style, hero_card_style,
-    hero_profile_button_style, icon_box_style, installed_badge_style, package_checkbox_style,
-    scan_button_style, tab_style, terminal_box_style, tinted_icon_bg, tool_tile_style,
-    update_banner_style, update_card_style, warning_badge_style,
+    continue_button_style, danger_button_style, ghost_button_style, hero_card_style,
+    hero_profile_button_style, installed_badge_style, package_checkbox_style, scan_button_style,
+    tab_style, terminal_box_style, tinted_icon_bg, tool_tile_style, update_banner_style,
+    warning_badge_style,
 };
 use crate::{App, LogBuffer, Message, ProgressState};
 
@@ -2292,32 +2292,6 @@ fn package_row<'a>(pkg: &'a Package, app: &'a App) -> Element<'a, Message> {
     container(pkg_row).padding([4, 0]).into()
 }
 
-/// Action card: icon + label + chevron, used on the profile select screen.
-fn action_card(icon: Icon, label: &str, on_press: Option<Message>) -> Element<'_, Message> {
-    let content = row![
-        text(char::from(icon))
-            .size(15)
-            .font(LUCIDE_FONT)
-            .color(MUTED),
-        text(label).size(14).color(MUTED_FG),
-        iced::widget::Space::new().width(Length::Fill),
-        text(char::from(Icon::ChevronRight))
-            .size(14)
-            .font(LUCIDE_FONT)
-            .color(MUTED),
-    ]
-    .spacing(12)
-    .align_y(iced::Alignment::Center)
-    .padding([14, 16])
-    .width(Length::Fill);
-
-    let mut btn = button(content).width(Length::Fill).style(update_card_style);
-    if let Some(msg) = on_press {
-        btn = btn.on_press(msg);
-    }
-    btn.into()
-}
-
 /// Tool tile: icon circle + label, used on the dashboard home screen.
 fn tool_tile<'a>(
     icon: Icon,
@@ -2453,38 +2427,5 @@ fn view_settings_changelog<'a>() -> Element<'a, Message> {
     scrollable(col)
         .height(Length::Fill)
         .width(Length::Fill)
-        .into()
-}
-
-fn profile_card(profile: Profile, selected: Option<Profile>) -> Element<'static, Message> {
-    let is_selected = selected == Some(profile);
-
-    // Icon in a small bordered box
-    let icon = text(profile.icon())
-        .size(16)
-        .font(LUCIDE_FONT)
-        .color(MUTED_FG);
-    let icon_box = container(icon)
-        .style(icon_box_style)
-        .padding(9)
-        .center_x(36)
-        .center_y(36);
-
-    // Text column
-    let title = text(profile.title()).size(14);
-    let desc = text(profile.description()).size(12).color(MUTED_FG);
-    let text_col = column![title, desc].spacing(2);
-
-    // Horizontal layout: icon box + text
-    let card_content = row![icon_box, text_col]
-        .spacing(14)
-        .align_y(iced::Alignment::Start)
-        .padding(16)
-        .width(Length::Fill);
-
-    button(card_content)
-        .on_press(Message::ProfileSelected(profile))
-        .width(Length::Fill)
-        .style(move |theme: &Theme, status| card_style(theme, status, is_selected))
         .into()
 }

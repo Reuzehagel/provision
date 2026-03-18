@@ -231,34 +231,6 @@ pub fn danger_button_style(_theme: &Theme, status: button::Status) -> button::St
 
 // ── Card styles ───────────────────────────────────────────────────
 
-pub fn card_style(_theme: &Theme, status: button::Status, selected: bool) -> button::Style {
-    let base_bg = if selected { CARD_HOVER } else { CARD_BG };
-
-    let border_color = if selected { BORDER_FOCUS } else { BORDER };
-
-    let background = match status {
-        button::Status::Hovered => CARD_HOVER,
-        _ => base_bg,
-    };
-
-    let hover_border = match status {
-        button::Status::Hovered => BORDER_FOCUS,
-        _ => border_color,
-    };
-
-    button::Style {
-        background: Some(iced::Background::Color(background)),
-        text_color: TEXT,
-        border: Border {
-            color: hover_border,
-            width: 1.0,
-            radius: 8.0.into(),
-        },
-        shadow: Shadow::default(),
-        snap: false,
-    }
-}
-
 pub fn update_banner_style(_theme: &Theme, status: button::Status) -> button::Style {
     let bg_alpha = match status {
         button::Status::Hovered => 0.12,
@@ -275,25 +247,6 @@ pub fn update_banner_style(_theme: &Theme, status: button::Status) -> button::St
         text_color: TEXT,
         border: Border {
             color: Color::from_rgba(STATUS_AMBER.r, STATUS_AMBER.g, STATUS_AMBER.b, 0.3),
-            width: 1.0,
-            radius: 8.0.into(),
-        },
-        shadow: Shadow::default(),
-        snap: false,
-    }
-}
-
-pub fn update_card_style(_theme: &Theme, status: button::Status) -> button::Style {
-    let bg = match status {
-        button::Status::Hovered => CARD_BG,
-        _ => Color::TRANSPARENT,
-    };
-
-    button::Style {
-        background: Some(iced::Background::Color(bg)),
-        text_color: MUTED_FG,
-        border: Border {
-            color: BORDER,
             width: 1.0,
             radius: 8.0.into(),
         },
@@ -380,25 +333,6 @@ pub fn browser_badge_style(_theme: &Theme) -> container::Style {
             0.3,
         ),
     )
-}
-
-pub fn icon_box_style(_theme: &Theme) -> container::Style {
-    container::Style {
-        background: Some(iced::Background::Color(CARD_BG)),
-        border: Border {
-            color: BORDER,
-            width: 1.0,
-            radius: 6.0.into(),
-        },
-        ..Default::default()
-    }
-}
-
-pub fn divider_style(_theme: &Theme) -> container::Style {
-    container::Style {
-        background: Some(iced::Background::Color(BORDER)),
-        ..Default::default()
-    }
 }
 
 pub fn hero_card_style(_theme: &Theme) -> container::Style {
