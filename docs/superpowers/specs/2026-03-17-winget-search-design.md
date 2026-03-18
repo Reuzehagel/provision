@@ -20,6 +20,11 @@ pub struct SearchPackage {
     pub name_lower: String,       // precomputed for filtering
     pub winget_id_lower: String,  // precomputed for filtering
 }
+
+impl BatchItem for SearchPackage {
+    fn name(&self) -> &str { &self.name }
+    fn winget_id(&self) -> &str { &self.winget_id }
+}
 ```
 
 - Mirrors `InstalledPackage` minus `size_bytes`
@@ -31,13 +36,12 @@ pub struct SearchPackage {
 ```rust
 pub enum SearchProgress {
     Activity { line: String },
-    Log { line: String },
     Completed { packages: Vec<SearchPackage> },
     Failed { error: String },
 }
 ```
 
-Same pattern as `ScanProgress` and `InstalledScanProgress`.
+Follows the `InstalledScanProgress` pattern — no separate `Log` variant since search scan output is transient (both `ScanEvent::Activity` and `ScanEvent::Log` map to `Activity`).
 
 ## Screens
 
@@ -52,6 +56,7 @@ Two new `Screen` variants:
 2. User types query, presses Enter or clicks Search button → streams `winget search <query>` results
 3. User checks packages, clicks "Install Selected" → `WingetSearchInstalling`
 4. Done → back to `WingetSearch` (not ProfileSelect, so they can search again)
+5. After install completes, re-scan installed packages to keep `installed_map` current
 
 ## App State
 
@@ -68,18 +73,22 @@ pub(crate) winget_search_install: ProgressState,
 pub(crate) _winget_search_handle: Option<task::Handle>,
 ```
 
+**Note:** `winget_search_query` is intentionally separate from the shared `self.search`/`self.search_lower` field. On other screens, `self.search` is an in-memory filter over preloaded results; here, the query is submitted to `winget search` as a command argument. Different semantics require a separate field. `GoToWingetSearch` does NOT call `clear_search()`.
+
 ## Search Engine
 
 ### `search_winget(query, dry_run)` (in `upgrade.rs`)
 
-Returns `impl Stream<Item = SearchProgress>`. Uses `run_winget_scan()` with args `["search", &query, "--accept-source-agreements"]`.
+Returns `impl Stream<Item = SearchProgress>`. Uses `run_winget_scan()` with args `["search", &query, "--count", "100", "--accept-source-agreements"]`.
+
+The `--count 100` flag limits results to prevent overwhelming the UI with broad queries.
 
 - **Dry run:** returns fake results after a short delay
 - **Real:** spawns winget, streams output, parses with `parse_search_table()`
 
 ### `parse_search_table(lines)` (in `upgrade.rs`)
 
-Parses `winget search` column-aligned output. Columns: `Name`, `Id`, `Version`, `Source` — same structure as `parse_list_table()`.
+Parses `winget search` column-aligned output. Columns: `Name`, `Id`, `Version`, optionally `Match`, `Source`. The `Match` column only appears when there are partial matches — the parser must handle its presence or absence by detecting column headers dynamically (same approach as existing parsers). The `Match` column value is discarded.
 
 ### Installation
 
@@ -88,6 +97,10 @@ Thin wrapper over `run_winget_batch()` with:
 - Base args: `["--accept-package-agreements", "--accept-source-agreements"]`
 
 Same pattern as `upgrade_all()`.
+
+### Post-install
+
+After install completes (`FinishWingetSearchInstall`), re-scan installed packages (same as `handle_finish_uninstall_and_reset`) so `installed_map` stays current.
 
 ### No debouncing
 
@@ -112,20 +125,33 @@ SelectAllWingetSearch,
 
 | Message | Action |
 |---------|--------|
-| `GoToWingetSearch` | Set screen, clear previous results/selection, focus search input |
+| `GoToWingetSearch` | Set screen, clear previous results/selection/error, focus search input (keep query text) |
 | `WingetSearchQueryChanged` | Store query string (no search triggered) |
-| `StartWingetSearch` | Spawn `search_winget()` stream, store handle, set `scanning = true` |
-| `WingetSearchProgress` | Activity → spinner, Completed → populate results + auto-select all, Failed → set error |
+| `StartWingetSearch` | Spawn `search_winget()` stream, store handle, set `scanning = true`, clear previous results |
+| `WingetSearchProgress` | Activity → update spinner/live line, Completed → populate results (no auto-select), Failed → set error |
 | `StartWingetSearchInstall` | Build queue from selected, call `run_winget_batch()`, transition to `WingetSearchInstalling` |
-| `FinishWingetSearchInstall` | Clear install state, return to `WingetSearch` |
-| `SelectAllWingetSearch` | Toggle all visible results via `toggle_set()` |
+| `FinishWingetSearchInstall` | Clear install state, re-scan installed packages, return to `WingetSearch` |
+| `SelectAllWingetSearch` | Toggle all results via `toggle_set()` |
+
+**Selection:** Results start with nothing selected. User explicitly picks packages to install. This avoids accidentally installing dozens of packages from a broad search.
 
 ### Keyboard
 
-- **Enter:** triggers search on `WingetSearch` (if not scanning); triggers done on `WingetSearchInstalling` when complete
-- **Escape:** goes back
-- **Ctrl+K:** focuses search input
-- All consistent with existing screen behavior
+**Enter key** (`handle_key_confirm`):
+- `WingetSearch` when not scanning and query non-empty and no results yet (or query changed since last search): `StartWingetSearch`
+- `WingetSearch` when results present and selection non-empty: `StartWingetSearchInstall`
+- `WingetSearchInstalling` when done: `FinishWingetSearchInstall`
+
+**Escape key** (`handle_key_escape`):
+- `WingetSearch`: go back to `ProfileSelect`
+- `WingetSearchInstalling` when not done: `CancelWingetSearchInstall`
+- `WingetSearchInstalling` when done: `FinishWingetSearchInstall`
+
+**Ctrl+K** (`handle_focus_search`): Add `WingetSearch` to the match. The search `text_input` uses `SEARCH_INPUT_ID` for focus operations.
+
+### Spinner Subscription
+
+The spinner tick subscription condition needs updating to include `WingetSearch` (when `winget_search_scanning`) and `WingetSearchInstalling` (when not done).
 
 ## View Layout
 
@@ -134,8 +160,8 @@ SelectAllWingetSearch,
 Structure mirrors `view_uninstall_select()`:
 
 1. **Header row:** back arrow + "Search Winget" title
-2. **Search bar:** text input + "Search" button (disabled while scanning). Enter triggers search
-3. **Results area:** scrollable list with checkbox rows showing name, winget ID, version
+2. **Search bar:** text input (using `SEARCH_INPUT_ID`) + "Search" button (disabled while scanning). Enter triggers search
+3. **Results area:** scrollable list with checkbox rows showing name, winget ID, version. Packages already in `installed_map` show an "installed" badge (muted text, no checkbox)
 4. **Empty states:**
    - Before first search: "Type a query and press Enter"
    - No results: "No results found"
@@ -160,8 +186,8 @@ New `action_card()` on the home dashboard:
 | File | Changes |
 |------|---------|
 | `src/upgrade.rs` | `SearchPackage`, `SearchProgress`, `search_winget()`, `parse_search_table()` |
-| `src/main.rs` | `Screen` variants, `App` state fields, `Message` variants, handler methods, keyboard routing |
-| `src/views.rs` | `view_winget_search()`, `view_winget_search_installing()` (or reuse `view_progress_screen`), ProfileSelect card |
+| `src/main.rs` | `Screen` variants, `App` state fields, `Message` variants, handler methods, keyboard routing, spinner subscription |
+| `src/views.rs` | `view_winget_search()`, ProfileSelect card, view dispatch for new screens |
 
 No new files. No new dependencies. No new style functions needed.
 
