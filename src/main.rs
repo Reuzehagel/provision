@@ -1,4 +1,5 @@
 mod catalog;
+mod github;
 mod install;
 mod profile;
 mod settings;
