@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Post-install steps screen — after installation, packages with custom install commands (WSL, Bun, uv, Rust, Topping, Remove Windows AI) show a checklist of required manual actions (restart terminal, restart PC, run downloaded installer)
+
+### Removed
+
+- Unused `Profile::description()` method and `SystemInfo::os_version` field
+
 ## [0.4.1] - 2026-03-19
 
 ### Added
