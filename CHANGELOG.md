@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.1] - 2026-03-19
+
+### Added
+
+- Persist GitHub OAuth token across app restarts (saved to `%APPDATA%\provision`)
+- Skip re-authentication when navigating back to Repos screen within same session
+
+### Fixed
+
+- Only clear saved token on auth errors (401/403), not transient network failures
+
+## [0.4.0] - 2026-03-19
+
+### Added
+
+- GitHub repo cloning — authenticate via device flow, browse repos, clone to local folders
+- Copy button on GitHub device code display
+- Winget package search — search the full winget catalog and install directly
+- PNG icon asset for GitHub OAuth app
+
+### Changed
+
+- Bump minimum font size to 12px for crisp rendering on Windows
+- Replace update scan terminal log with centered spinner layout
+- Profile cards no longer expand to fill screen height
+- Clone repos into subdirectories of selected folder (not as the folder itself)
+
+### Fixed
+
+- Scrollbar padding missing on package select and update select screens
+
 ## [0.3.2] - 2026-03-11
 
 ### Added
