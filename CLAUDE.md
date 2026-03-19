@@ -16,6 +16,7 @@ Windows provisioning GUI built with Rust and Iced. See `DESIGN.md` for design sy
 
 - **After making any code changes, always run `just check`** — runs `cargo build`, `clippy`, and `fmt --check` in sequence
 - **Use `cargo run -- --dry` during development** — fake winget data, no real installs. Lets you test UI without winget. Note: no `just dry` shortcut exists; use the cargo command directly.
+- **Always update `CHANGELOG.md` before tagging a release** — add entries under the new version heading before pushing the tag. Follow the Keep a Changelog format already in the file.
 
 ## Build & Run
 
