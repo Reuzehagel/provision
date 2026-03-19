@@ -426,7 +426,7 @@ impl App {
                 winget_search_queue: Vec::new(),
                 winget_search_install: ProgressState::default(),
                 _winget_search_handle: None,
-                github_token: None,
+                github_token: github::load_token(),
                 github_user_code: None,
                 github_verification_uri: None,
                 github_polling: false,
@@ -1269,7 +1269,21 @@ impl App {
     // ── GitHub clone flow ────────────────────────────────────
 
     fn handle_go_to_github_login(&mut self) -> Task<Message> {
-        self.github_token = None;
+        // If already authenticated this session, go straight to repos
+        if let Some(token) = self.github_token.clone() {
+            self.clear_search();
+            self.screen = Screen::GitHubRepos;
+            if self.github_repos.is_empty() && !self.github_repos_loading {
+                self.github_repos_loading = true;
+                let dry = self.dry_run;
+                return Task::perform(
+                    async move { github::fetch_repos(&token, dry).await },
+                    Message::GitHubReposFetched,
+                );
+            }
+            return Task::none();
+        }
+
         self.github_user_code = None;
         self.github_verification_uri = None;
         self.github_auth_error = None;
@@ -1306,10 +1320,13 @@ impl App {
                 self.screen = Screen::GitHubRepos;
 
                 let dry = self.dry_run;
-                return Task::perform(
-                    async move { github::fetch_repos(&token, dry).await },
-                    Message::GitHubReposFetched,
-                );
+                return Task::batch([
+                    Task::perform(github::save_token(token.clone()), Message::Noop),
+                    Task::perform(
+                        async move { github::fetch_repos(&token, dry).await },
+                        Message::GitHubReposFetched,
+                    ),
+                ]);
             }
             github::DeviceFlowProgress::Failed { error } => {
                 self.github_auth_error = Some(error);
@@ -1330,7 +1347,12 @@ impl App {
                 self.github_repos = repos;
             }
             Err(e) => {
+                let is_auth_error = e.starts_with("AUTH:");
                 self.github_auth_error = Some(e);
+                if is_auth_error {
+                    self.github_token = None;
+                    return Task::perform(github::clear_token(), Message::Noop);
+                }
             }
         }
         Task::none()

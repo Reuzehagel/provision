@@ -36,6 +36,36 @@ fn urlencoded(s: &str) -> String {
 /// This is a public value — safe to embed in the binary.
 const GITHUB_CLIENT_ID: &str = "Ov23li4Kne9leSVg4CZs";
 
+const TOKEN_FILE: &str = "github_token";
+
+fn token_path() -> Option<std::path::PathBuf> {
+    crate::catalog::dirs_cache_dir()
+        .ok()
+        .map(|d| d.join(TOKEN_FILE))
+}
+
+/// Load a previously saved GitHub token from `%APPDATA%\provision`.
+pub fn load_token() -> Option<String> {
+    std::fs::read_to_string(token_path()?)
+        .ok()
+        .filter(|s| !s.is_empty())
+}
+
+/// Save a GitHub token to `%APPDATA%\provision` (best-effort).
+pub async fn save_token(token: String) {
+    let Some(path) = token_path() else { return };
+    if let Some(parent) = path.parent() {
+        let _ = tokio::fs::create_dir_all(parent).await;
+    }
+    let _ = tokio::fs::write(path, token).await;
+}
+
+/// Remove the saved GitHub token (best-effort).
+pub async fn clear_token() {
+    let Some(path) = token_path() else { return };
+    let _ = tokio::fs::remove_file(path).await;
+}
+
 type Sender = futures::channel::mpsc::Sender<DeviceFlowProgress>;
 
 // ── Serde structs for GitHub API responses ──────────────────
@@ -374,6 +404,14 @@ pub(crate) async fn fetch_repos(token: &str, dry_run: bool) -> Result<Vec<GitHub
             .send()
             .await
             .map_err(|e| format!("Request failed: {e}"))?;
+
+        let status = resp.status().as_u16();
+        if status == 401 || status == 403 {
+            return Err(format!("AUTH:{status} Unauthorized — token may be revoked"));
+        }
+        if !resp.status().is_success() {
+            return Err(format!("HTTP {status}"));
+        }
 
         let body = resp.text().await.map_err(|e| format!("Read failed: {e}"))?;
         let repos: Vec<RepoResponse> =
