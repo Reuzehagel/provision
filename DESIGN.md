@@ -40,17 +40,20 @@ Based on Tailwind's **zinc** scale for neutrals, with semantic accent colors.
 
 ## Typography
 
+Minimum text size is **12px** for crisp rendering on Windows (Iced/wgpu). Default text size is **14px**.
+
 | Element          | Size | Weight  | Color                        |
 | ---------------- | ---- | ------- | ---------------------------- |
 | App title        | 28px | Default | `TEXT`                       |
 | Screen heading   | 18px | Default | `TEXT`                       |
-| Subtitle         | 12px | Default | `TEXT_SECONDARY`             |
+| Subtitle         | 13px | Default | `TEXT_SECONDARY`             |
 | Card title       | 14px | Default | `TEXT`                       |
-| Card description | 12px | Default | `MUTED_FG`                   |
+| Card description | 13px | Default | `MUTED_FG`                   |
 | Body / labels    | 13px | Default | `TEXT`                       |
-| Small / caption  | 11px | Default | `MUTED`                      |
-| Category label   | 10px | Default | `MUTED` (uppercase, tracked) |
-| Terminal text    | 11px | Mono    | `MUTED_FG`                   |
+| Small / caption  | 12px | Default | `MUTED`                      |
+| Category label   | 12px | Default | `MUTED` (uppercase, tracked) |
+| Badge text       | 12px | Default | contextual                   |
+| Terminal text    | 12px | Mono    | `MUTED_FG`                   |
 
 ---
 
@@ -97,7 +100,7 @@ _(Tighter than current 12px/8px — shadcn uses subtle rounding)_
 Three-section dashboard within a centered ~500px column:
 
 **Hero Card** (gradient container):
-- Top row: Provision logo + title (left), system info (right, muted 9px)
+- Top row: Provision logo + title (left), system info (right, muted 12px)
 - Bottom row: 3 equal-width profile buttons (Laptop, Desktop, Manual)
 - Background: 135° gradient from dark slate-blue to `CARD`
 - Padding: 16px, border: 1px `BORDER`, radius: 8px
@@ -218,6 +221,14 @@ Named constants via `Icon` enum: `Icon::ArrowLeft`, `Icon::ChevronLeft`, `Icon::
 | Back button   | 16px |
 | Status icons  | 14px |
 | Inline badges | 12px |
+
+### Update Scanning Screen
+
+Centered spinner layout (no terminal log box):
+- **Scanning**: large spinner + "Scanning for updates..." + live activity line + Cancel button, all centered
+- **Done (no packages)**: green check icon + "All packages are up to date" + Done button, centered
+- **Error**: red X icon + "Scan failed" + error message + Done button, centered
+- Auto-transitions to UpdateSelect when packages are found
 
 ---
 

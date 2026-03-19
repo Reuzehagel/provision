@@ -34,7 +34,7 @@ fn urlencoded(s: &str) -> String {
 
 /// Client ID from the registered GitHub OAuth App for provision.
 /// This is a public value — safe to embed in the binary.
-const GITHUB_CLIENT_ID: &str = "PLACEHOLDER_CLIENT_ID";
+const GITHUB_CLIENT_ID: &str = "Ov23li4Kne9leSVg4CZs";
 
 type Sender = futures::channel::mpsc::Sender<DeviceFlowProgress>;
 

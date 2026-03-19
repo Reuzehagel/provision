@@ -551,6 +551,7 @@ pub(crate) enum Message {
     FinishGitHubBootstrap,
     #[allow(dead_code)]
     OpenGitHubUrl,
+    CopyDeviceCode,
     KeyConfirm,
     KeyEscape,
     FocusSearch,
@@ -631,14 +632,17 @@ impl App {
             Message::GitHubReposFetched(r) => self.handle_github_repos_fetched(r),
             Message::GitHubSelectFolder(full_name) => self.handle_github_select_folder(full_name),
             Message::GitHubFolderPicked(full_name, path) => {
+                let repo = self
+                    .github_repos
+                    .iter()
+                    .find(|r| r.full_name == full_name)
+                    .cloned()
+                    .expect("repo must exist");
+                // Clone into a subdirectory named after the repo
+                let dest = path.join(&repo.name);
                 self.github_clone_queue.push(github::CloneItem {
-                    repo: self
-                        .github_repos
-                        .iter()
-                        .find(|r| r.full_name == full_name)
-                        .cloned()
-                        .expect("repo must exist"),
-                    destination: path,
+                    repo,
+                    destination: dest,
                 });
                 Task::none()
             }
@@ -672,6 +676,12 @@ impl App {
             Message::FinishGitHubBootstrap => {
                 self.github_bootstrap_items.clear();
                 self.screen = Screen::GitHubRepos;
+                Task::none()
+            }
+            Message::CopyDeviceCode => {
+                if let Some(ref code) = self.github_user_code {
+                    return clipboard::write(code.clone());
+                }
                 Task::none()
             }
             Message::OpenGitHubUrl => {
