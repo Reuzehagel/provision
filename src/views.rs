@@ -595,6 +595,66 @@ impl App {
         )
     }
 
+    pub(crate) fn view_post_install_steps(&self) -> Element<'_, Message> {
+        let header = text("Next steps").size(20);
+        let subtitle = text("Some packages need manual action to finish setup.")
+            .size(13)
+            .color(MUTED);
+
+        let mut cards = column![].spacing(8).width(Length::Fill);
+
+        for (pkg, status) in self.install_queue.iter().zip(self.install.statuses.iter()) {
+            let step = match (&status, &pkg.post_install) {
+                (PackageStatus::Done, Some(msg)) => msg.as_str(),
+                _ => continue,
+            };
+
+            let icon = text(char::from(Icon::Info))
+                .size(16)
+                .font(LUCIDE_FONT)
+                .color(STATUS_BLUE);
+
+            let card_content = column![
+                row![icon, text(&pkg.name).size(14)]
+                    .spacing(8)
+                    .align_y(iced::Alignment::Center),
+                text(step).size(13).color(MUTED),
+            ]
+            .spacing(4);
+
+            let card = container(card_content)
+                .style(card_container_style)
+                .padding(12)
+                .width(Length::Fill);
+
+            cards = cards.push(card);
+        }
+
+        let done_btn = button(text("Done").size(14))
+            .style(continue_button_style)
+            .padding([8, 20])
+            .on_press(Message::DismissPostInstallSteps);
+
+        let footer =
+            row![iced::widget::Space::new().width(Length::Fill), done_btn,].width(Length::Fill);
+
+        let content = column![
+            header,
+            subtitle,
+            scrollable(cards).height(Length::Fill),
+            footer
+        ]
+        .spacing(12)
+        .width(Length::Fill)
+        .height(Length::Fill);
+
+        container(content)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .padding(28)
+            .into()
+    }
+
     pub(crate) fn view_update_scanning(&self) -> Element<'_, Message> {
         let scan = &self.update_scan;
 

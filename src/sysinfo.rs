@@ -2,19 +2,12 @@ use sysinfo::System;
 
 pub struct SystemInfo {
     pub hostname: String,
-    pub os_version: String,
     pub cpu_name: String,
     pub ram_gb: f64,
 }
 
 pub fn gather() -> SystemInfo {
     let hostname = System::host_name().unwrap_or_else(|| "Unknown".into());
-
-    let os_version = System::long_os_version().unwrap_or_else(|| {
-        System::os_version()
-            .map(|v| format!("Windows {v}"))
-            .unwrap_or_else(|| "Windows".into())
-    });
 
     let sys = System::new_with_specifics(
         sysinfo::RefreshKind::nothing()
@@ -33,7 +26,6 @@ pub fn gather() -> SystemInfo {
 
     SystemInfo {
         hostname,
-        os_version,
         cpu_name,
         ram_gb,
     }

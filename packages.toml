@@ -119,6 +119,7 @@ description = "Fast, dependency-free JavaScript runtime and bundler"
 category = "development"
 profiles = ["laptop", "desktop"]
 install_command = "powershell -c \"irm bun.sh/install.ps1|iex\""
+post_install = "Restart your terminal for PATH changes to take effect"
 
 [[packages]]
 id = "docker"
@@ -247,6 +248,7 @@ description = "Systems programming language via rustup"
 category = "development"
 profiles = ["desktop"]
 install_command = "start https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe"
+post_install = "Run the downloaded rustup-init.exe installer, then restart your terminal"
 
 [[packages]]
 id = "starship"
@@ -263,6 +265,7 @@ description = "Extremely fast Python package and project manager"
 category = "development"
 profiles = ["laptop", "desktop"]
 install_command = "powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\""
+post_install = "Restart your terminal for PATH changes to take effect"
 
 [[packages]]
 id = "vscode"
@@ -448,6 +451,7 @@ description = "Windows Subsystem for Linux"
 category = "microsoft-tools"
 profiles = ["laptop", "desktop"]
 install_command = "wsl --install"
+post_install = "Restart your PC to complete WSL setup"
 
 
 # ── Multimedia ───────────────────────────────────────────────
@@ -531,6 +535,7 @@ description = "USB DAC driver and configuration software"
 category = "multimedia"
 profiles = ["desktop"]
 install_command = "start https://topping.pro/download/N8yynYw"
+post_install = "Run the downloaded installer from your browser"
 
 [[packages]]
 id = "vlc"
@@ -775,3 +780,4 @@ description = "Remove Windows AI features (Copilot, Recall, etc.)"
 category = "tweaks"
 profiles = ["laptop", "desktop"]
 install_command = "powershell.exe -ExecutionPolicy Bypass -c \"& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/zoicware/RemoveWindowsAI/main/RemoveWindowsAi.ps1')))\""
+post_install = "Restart your PC for changes to take full effect"

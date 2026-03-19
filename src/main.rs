@@ -463,6 +463,7 @@ pub(crate) enum Screen {
     GitHubRepos,
     GitHubCloning,
     GitHubBootstrap,
+    PostInstallSteps,
 }
 
 #[derive(Debug, Clone)]
@@ -552,6 +553,7 @@ pub(crate) enum Message {
     #[allow(dead_code)]
     OpenGitHubUrl,
     CopyDeviceCode,
+    DismissPostInstallSteps,
     KeyConfirm,
     KeyEscape,
     FocusSearch,
@@ -676,6 +678,10 @@ impl App {
             Message::FinishGitHubBootstrap => {
                 self.github_bootstrap_items.clear();
                 self.screen = Screen::GitHubRepos;
+                Task::none()
+            }
+            Message::DismissPostInstallSteps => {
+                self.reset_install_state();
                 Task::none()
             }
             Message::CopyDeviceCode => {
@@ -899,13 +905,31 @@ impl App {
     }
 
     fn handle_finish_and_reset(&mut self) -> Task<Message> {
+        // Check if any successfully installed packages have post-install steps
+        let has_post_install = self
+            .install_queue
+            .iter()
+            .zip(self.install.statuses.iter())
+            .any(|(pkg, status)| {
+                matches!(status, PackageStatus::Done) && pkg.post_install.is_some()
+            });
+
+        if has_post_install {
+            self.screen = Screen::PostInstallSteps;
+            return Task::none();
+        }
+
+        self.reset_install_state();
+        Task::none()
+    }
+
+    fn reset_install_state(&mut self) {
         self.selected_profile = None;
         self.selected.clear();
         self.clear_search();
         self.install_queue.clear();
         self.install = ProgressState::default();
         self.screen = Screen::ProfileSelect;
-        Task::none()
     }
 
     fn handle_finish_update_and_reset(&mut self) -> Task<Message> {
@@ -1647,6 +1671,7 @@ impl App {
                 self.handle_start_github_clone()
             }
             Screen::GitHubCloning if self.github_clone.done => self.handle_finish_github_clone(),
+            Screen::PostInstallSteps => self.update(Message::DismissPostInstallSteps),
             _ => Task::none(),
         }
     }
@@ -1676,6 +1701,7 @@ impl App {
                 self.screen = Screen::GitHubRepos;
                 Task::none()
             }
+            Screen::PostInstallSteps => self.update(Message::DismissPostInstallSteps),
             _ => Task::none(),
         }
     }
@@ -1710,6 +1736,7 @@ impl App {
             Screen::GitHubRepos => self.view_github_repos(),
             Screen::GitHubCloning => self.view_github_cloning(),
             Screen::GitHubBootstrap => self.view_github_bootstrap(),
+            Screen::PostInstallSteps => self.view_post_install_steps(),
         }
     }
 

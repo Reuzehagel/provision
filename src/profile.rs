@@ -16,14 +16,6 @@ impl Profile {
         }
     }
 
-    pub fn description(self) -> &'static str {
-        match self {
-            Profile::Laptop => "Portable essentials",
-            Profile::Desktop => "Full setup",
-            Profile::Manual => "Start from scratch",
-        }
-    }
-
     pub fn slug(self) -> &'static str {
         match self {
             Profile::Laptop => "laptop",
