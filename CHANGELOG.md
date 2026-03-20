@@ -5,14 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.4.2] - 2026-03-20
-
-### Added
-
-- Post-install steps screen — after installation, packages with custom install commands (WSL, Bun, uv, Rust, Topping, Remove Windows AI) show a checklist of required manual actions (restart terminal, restart PC, run downloaded installer)
-- Auto-scan for upgradeable packages on launch
-- Install queue reordering — manual-step packages queued last
-- SetupKind badges on review and package select screens (terminal restart, browser download, reboot)
+## [0.4.3] - 2026-03-20
 
 ### Changed
 
@@ -21,6 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Use `LogBuffer::joined()` cache in copy-log instead of re-joining lines
 - Use `styles::BG` constant in theme instead of duplicated inline color
 - Consolidate `cancel_msg`/`done_msg` into `ProgressLabels` struct; destructure to avoid clone
+
+## [0.4.2] - 2026-03-20
+
+### Added
+
+- Post-install steps screen — after installation, packages with custom install commands (WSL, Bun, uv, Rust, Topping, Remove Windows AI) show a checklist of required manual actions (restart terminal, restart PC, run downloaded installer)
+- Auto-scan for upgradeable packages on launch
+- Install queue reordering — manual-step packages queued last
+- SetupKind badges on review and package select screens (terminal restart, browser download, reboot)
 
 ### Removed
 
