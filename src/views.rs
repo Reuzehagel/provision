@@ -18,8 +18,8 @@ use crate::styles::{
     STATUS_GREEN, STATUS_RED, TERMINAL_TEXT, TEXT, browser_badge_style, cancel_button_style,
     card_container_style, continue_button_style, danger_button_style, ghost_button_style,
     hero_card_style, hero_profile_button_style, installed_badge_style, package_checkbox_style,
-    scan_button_style, selected_row_style, tab_style, terminal_box_style, tinted_icon_bg,
-    tool_tile_style, update_banner_style, warning_badge_style,
+    reboot_badge_style, restart_badge_style, scan_button_style, selected_row_style, tab_style,
+    terminal_box_style, tinted_icon_bg, tool_tile_style, update_banner_style, warning_badge_style,
 };
 use crate::{App, LogBuffer, Message, ProgressState};
 
@@ -468,10 +468,8 @@ impl App {
             let mut cat_col = column![cat_label].spacing(4);
 
             for pkg in cat_pkgs {
-                let is_browser = pkg.is_browser_download();
-
-                let method_widget: Element<'_, Message> = if is_browser {
-                    row![
+                let method_widget: Element<'_, Message> = match pkg.setup_kind() {
+                    catalog::SetupKind::BrowserDownload => row![
                         text(char::from(Icon::ExternalLink))
                             .size(12)
                             .font(LUCIDE_FONT)
@@ -480,18 +478,19 @@ impl App {
                     ]
                     .spacing(4)
                     .align_y(iced::Alignment::Center)
-                    .into()
-                } else {
-                    let method = match (&pkg.install_command, &pkg.winget_id) {
-                        (Some(cmd), _) => cmd.clone(),
-                        (_, Some(wid)) => wid.clone(),
-                        _ => "unknown".into(),
-                    };
-                    text(method)
-                        .size(12)
-                        .font(iced::Font::MONOSPACE)
-                        .color(MUTED)
-                        .into()
+                    .into(),
+                    _ => {
+                        let method = match (&pkg.install_command, &pkg.winget_id) {
+                            (Some(cmd), _) => cmd.clone(),
+                            (_, Some(wid)) => wid.clone(),
+                            _ => "unknown".into(),
+                        };
+                        text(method)
+                            .size(11)
+                            .font(iced::Font::MONOSPACE)
+                            .color(MUTED)
+                            .into()
+                    }
                 };
 
                 let name_text = text(&pkg.name).size(14);
@@ -503,6 +502,28 @@ impl App {
                         .style(warning_badge_style)
                         .padding([2, 6]);
                     name_row = name_row.push(badge);
+                }
+
+                match pkg.setup_kind() {
+                    catalog::SetupKind::BrowserDownload => {
+                        let badge = container(text("manual download").size(10).color(STATUS_AMBER))
+                            .style(warning_badge_style)
+                            .padding([2, 6]);
+                        name_row = name_row.push(badge);
+                    }
+                    catalog::SetupKind::Reboot => {
+                        let badge = container(text("reboot").size(10).color(STATUS_RED))
+                            .style(reboot_badge_style)
+                            .padding([2, 6]);
+                        name_row = name_row.push(badge);
+                    }
+                    catalog::SetupKind::TerminalRestart => {
+                        let badge = container(text("terminal restart").size(10).color(STATUS_BLUE))
+                            .style(restart_badge_style)
+                            .padding([2, 6]);
+                        name_row = name_row.push(badge);
+                    }
+                    catalog::SetupKind::Silent => {}
                 }
 
                 let pkg_row = row![
@@ -562,12 +583,40 @@ impl App {
             .width(Length::Fill)
             .height(Length::Fill);
 
-        if queue.iter().any(|p| p.id == catalog::WSL_PACKAGE_ID) {
-            content = content.push(status_indicator(
-                Icon::TriangleAlert,
-                "WSL installation may require a system restart to take effect.".into(),
-                STATUS_AMBER,
-            ));
+        let special_count = queue
+            .iter()
+            .filter(|p| p.setup_kind() != catalog::SetupKind::Silent)
+            .count();
+        if special_count > 0 {
+            let has_reboot = queue
+                .iter()
+                .any(|p| p.setup_kind() == catalog::SetupKind::Reboot);
+            let has_restart = queue
+                .iter()
+                .any(|p| p.setup_kind() == catalog::SetupKind::TerminalRestart);
+            let has_download = queue
+                .iter()
+                .any(|p| p.setup_kind() == catalog::SetupKind::BrowserDownload);
+
+            let summary = if special_count == 1 {
+                if has_reboot {
+                    "1 package requires a system reboot \u{2014} installed last.".into()
+                } else if has_download {
+                    "1 package opens a browser download \u{2014} installed last.".into()
+                } else {
+                    "1 package needs a terminal restart \u{2014} installed last.".into()
+                }
+            } else if has_reboot && !has_restart && !has_download {
+                format!("{special_count} packages require a system reboot \u{2014} installed last.")
+            } else if has_restart && !has_reboot && !has_download {
+                format!("{special_count} packages need a terminal restart \u{2014} installed last.")
+            } else {
+                format!(
+                    "{special_count} packages need manual steps \u{2014} they'll be installed last."
+                )
+            };
+
+            content = content.push(status_indicator(Icon::TriangleAlert, summary, STATUS_AMBER));
         }
 
         let content = content.push(footer);
@@ -2313,8 +2362,6 @@ fn package_row<'a>(pkg: &'a Package, app: &'a App) -> Element<'a, Message> {
         .text_size(14)
         .style(package_checkbox_style);
 
-    let is_browser = pkg.is_browser_download();
-
     let mut pkg_row = row![cb].spacing(8).align_y(iced::Alignment::Center);
     if installed {
         let badge_label = text("Installed").size(12).color(STATUS_GREEN);
@@ -2323,20 +2370,35 @@ fn package_row<'a>(pkg: &'a Package, app: &'a App) -> Element<'a, Message> {
             .padding([1, 6]);
         pkg_row = pkg_row.push(badge);
     }
-    if is_browser {
-        let badge_content = row![
-            text(char::from(Icon::ExternalLink))
-                .size(12)
-                .font(LUCIDE_FONT)
-                .color(STATUS_BLUE),
-            text("Opens browser").size(12).color(STATUS_BLUE),
-        ]
-        .spacing(3)
-        .align_y(iced::Alignment::Center);
-        let badge = container(badge_content)
-            .style(browser_badge_style)
-            .padding([1, 6]);
-        pkg_row = pkg_row.push(badge);
+    match pkg.setup_kind() {
+        catalog::SetupKind::BrowserDownload => {
+            let badge_content = row![
+                text(char::from(Icon::ExternalLink))
+                    .size(9)
+                    .font(LUCIDE_FONT)
+                    .color(STATUS_BLUE),
+                text("manual download").size(10).color(STATUS_BLUE),
+            ]
+            .spacing(3)
+            .align_y(iced::Alignment::Center);
+            let badge = container(badge_content)
+                .style(browser_badge_style)
+                .padding([1, 6]);
+            pkg_row = pkg_row.push(badge);
+        }
+        catalog::SetupKind::Reboot => {
+            let badge = container(text("reboot").size(10).color(STATUS_RED))
+                .style(reboot_badge_style)
+                .padding([1, 6]);
+            pkg_row = pkg_row.push(badge);
+        }
+        catalog::SetupKind::TerminalRestart => {
+            let badge = container(text("terminal restart").size(10).color(STATUS_BLUE))
+                .style(restart_badge_style)
+                .padding([1, 6]);
+            pkg_row = pkg_row.push(badge);
+        }
+        catalog::SetupKind::Silent => {}
     }
 
     container(pkg_row).padding([4, 0]).into()

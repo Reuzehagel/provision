@@ -61,13 +61,6 @@ pub struct Package {
 }
 
 impl Package {
-    /// True if this package opens a browser URL instead of silently installing.
-    pub fn is_browser_download(&self) -> bool {
-        self.install_command
-            .as_deref()
-            .is_some_and(|c| c.starts_with("start http"))
-    }
-
     /// Classify this package by what post-install action the user needs.
     pub fn setup_kind(&self) -> SetupKind {
         // Id-based overrides (can't be detected from install_command alone)
@@ -83,6 +76,7 @@ impl Package {
     }
 
     /// User-facing checklist instruction for this package, if it needs manual steps.
+    #[allow(dead_code)]
     pub fn setup_instruction(&self) -> Option<&'static str> {
         match self.id.as_str() {
             "bun" => Some("Restart your terminal for Bun to be available on PATH"),
@@ -114,9 +108,6 @@ pub fn load_catalog() -> Vec<Package> {
     let raw = include_str!("../packages.toml");
     parse_catalog_toml(raw).expect("embedded packages.toml should be valid")
 }
-
-/// Package ID for WSL — used to show restart warning on the review screen.
-pub const WSL_PACKAGE_ID: &str = "wsl";
 
 const REMOTE_URL: &str =
     "https://raw.githubusercontent.com/Reuzehagel/provision/main/packages.toml";
