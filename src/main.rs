@@ -943,16 +943,34 @@ impl App {
     // ── Install flow ─────────────────────────────────────────────
 
     fn handle_start_install(&mut self) -> Task<Message> {
-        let queue: Vec<Package> = self
+        let mut queue: Vec<Package> = self
             .catalog
             .iter()
             .filter(|p| self.selected.contains(&p.id))
             .cloned()
             .collect();
 
+        // Reorder: silent packages first, then by SetupKind weight
+        queue.sort_by_key(|p| p.setup_kind());
+
+        let has_special = queue
+            .iter()
+            .any(|p| p.setup_kind() != catalog::SetupKind::Silent);
+        let all_special = queue
+            .iter()
+            .all(|p| p.setup_kind() != catalog::SetupKind::Silent);
+
         self.install.start(queue.len());
         self.install_queue = queue.clone();
         self.screen = Screen::Installing;
+
+        // Log a note about reordering if there are special packages mixed with silent ones
+        if has_special && !all_special {
+            self.install
+                .log
+                .push("Manual-step packages queued last.".into());
+            self.install.log.push(String::new());
+        }
 
         let dry = self.dry_run;
         let extra = self.settings.install_args();
