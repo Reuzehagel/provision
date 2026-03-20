@@ -314,6 +314,7 @@ pub(crate) struct App {
     pub(crate) settings_tab: settings::SettingsTab,
     // Install state
     pub(crate) install_queue: Vec<Package>,
+    pub(crate) checklist_checked: HashSet<String>,
     pub(crate) install: ProgressState,
     /// Full installed package data from winget list (for uninstall screen)
     pub(crate) installed_packages: Vec<upgrade::InstalledPackage>,
@@ -401,6 +402,7 @@ impl App {
                 settings: settings::load_settings(),
                 settings_tab: settings::SettingsTab::default(),
                 install_queue: Vec::new(),
+                checklist_checked: HashSet::new(),
                 install: ProgressState::default(),
                 installed_packages: Vec::new(),
                 installed_map: HashMap::new(),
@@ -479,6 +481,7 @@ pub(crate) enum Message {
     CancelInstall,
     InstallProgress(install::InstallProgress),
     FinishAndReset,
+    ToggleChecklist(String),
     StartUpdateScan,
     CancelUpdateScan,
     UpdateScanProgress(upgrade::ScanProgress),
@@ -596,6 +599,12 @@ impl App {
             Message::CancelInstall => self.handle_cancel_install(),
             Message::InstallProgress(e) => self.handle_install_progress(e),
             Message::FinishAndReset => self.handle_finish_and_reset(),
+            Message::ToggleChecklist(key) => {
+                if !self.checklist_checked.remove(&key) {
+                    self.checklist_checked.insert(key);
+                }
+                Task::none()
+            }
             Message::StartUpdateScan => self.handle_start_update_scan(),
             Message::CancelUpdateScan => self.handle_cancel_update_scan(),
             Message::UpdateScanProgress(e) => self.handle_update_scan_progress(e),
@@ -927,6 +936,7 @@ impl App {
         self.selected_profile = None;
         self.selected.clear();
         self.clear_search();
+        self.checklist_checked.clear();
         self.install_queue.clear();
         self.install = ProgressState::default();
         self.screen = Screen::ProfileSelect;
@@ -960,6 +970,7 @@ impl App {
             .iter()
             .all(|p| p.setup_kind() != catalog::SetupKind::Silent);
 
+        self.checklist_checked.clear();
         self.install.start(queue.len());
         self.install_queue = queue.clone();
         self.screen = Screen::Installing;

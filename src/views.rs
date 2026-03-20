@@ -629,19 +629,330 @@ impl App {
     }
 
     pub(crate) fn view_installing(&self) -> Element<'_, Message> {
-        view_progress_screen(
-            &self.install,
-            &ProgressLabels {
-                verb: "Installing",
-                done_label: "Installation",
-                dry_run_warning: "No packages will actually be installed",
-            },
-            self.install_queue.iter().map(|p| p.name.as_str()),
-            self.dry_run,
-            Message::CancelInstall,
-            Message::FinishAndReset,
-            self.spinner_frame,
-        )
+        let state = &self.install;
+        let names: Vec<&str> = self.install_queue.iter().map(|p| p.name.as_str()).collect();
+        let total = names.len();
+        let (done_count, failed_count, cancelled_count) = state.status_counts();
+
+        // Heading
+        let heading_row = if state.done {
+            let label = match (self.dry_run, cancelled_count > 0) {
+                (true, true) => "Dry Run Cancelled".to_string(),
+                (true, false) => "Dry Run Complete".to_string(),
+                (false, true) => "Installation Cancelled".to_string(),
+                (false, false) => "Installation Complete".to_string(),
+            };
+            row![text(label).size(20)]
+                .spacing(8)
+                .align_y(iced::Alignment::Center)
+        } else {
+            let verb = if self.dry_run {
+                "[DRY RUN] Installing".to_string()
+            } else {
+                "Installing".to_string()
+            };
+            let count_text = format!(
+                "{} of {total} \u{00b7} {}",
+                state.current + 1,
+                state.elapsed_display()
+            );
+            row![text(verb).size(20), text(count_text).size(14).color(MUTED),]
+                .spacing(8)
+                .align_y(iced::Alignment::Center)
+        };
+
+        // Subtitle
+        let subtitle: Element<'_, Message> = if state.done {
+            let mut counts = row![].spacing(6).align_y(iced::Alignment::Center);
+            counts = counts
+                .push(
+                    text(char::from(Icon::CircleCheck))
+                        .size(13)
+                        .font(LUCIDE_FONT)
+                        .color(STATUS_GREEN),
+                )
+                .push(
+                    text(format!("{done_count} succeeded"))
+                        .size(13)
+                        .color(STATUS_GREEN),
+                );
+            counts = counts
+                .push(text("\u{00b7}").size(13).color(MUTED))
+                .push(
+                    text(char::from(Icon::CircleX))
+                        .size(13)
+                        .font(LUCIDE_FONT)
+                        .color(if failed_count > 0 { STATUS_RED } else { MUTED }),
+                )
+                .push(
+                    text(format!("{failed_count} failed"))
+                        .size(13)
+                        .color(if failed_count > 0 { STATUS_RED } else { MUTED }),
+                );
+            if cancelled_count > 0 {
+                counts = counts
+                    .push(text("\u{00b7}").size(13).color(MUTED))
+                    .push(
+                        text(char::from(Icon::CircleX))
+                            .size(13)
+                            .font(LUCIDE_FONT)
+                            .color(STATUS_AMBER),
+                    )
+                    .push(
+                        text(format!("{cancelled_count} cancelled"))
+                            .size(13)
+                            .color(STATUS_AMBER),
+                    );
+            }
+            counts = counts
+                .push(text("\u{00b7}").size(13).color(MUTED))
+                .push(
+                    text(char::from(Icon::Clock))
+                        .size(13)
+                        .font(LUCIDE_FONT)
+                        .color(MUTED),
+                )
+                .push(text(state.elapsed_display()).size(13).color(MUTED));
+            counts.into()
+        } else if self.dry_run {
+            text("No packages will actually be installed")
+                .size(13)
+                .color(STATUS_AMBER)
+                .into()
+        } else {
+            let name = names.get(state.current).unwrap_or(&"...");
+            text(*name).size(13).color(MUTED).into()
+        };
+
+        let completed = (done_count + failed_count + cancelled_count) as f32;
+        let progress = progress_bar(0.0..=total as f32, completed);
+
+        // Package list
+        let mut pkg_list = column![].spacing(2).width(Length::Fill);
+        for (i, name) in names.iter().enumerate() {
+            let (icon, color, label): (Element<'_, Message>, _, _) = match &state.statuses[i] {
+                PackageStatus::Pending => (
+                    text(char::from(Icon::Circle))
+                        .size(14)
+                        .font(LUCIDE_FONT)
+                        .color(MUTED)
+                        .into(),
+                    MUTED,
+                    "Pending".into(),
+                ),
+                PackageStatus::Installing => (
+                    text(SPINNER_FRAMES[self.spinner_frame])
+                        .size(14)
+                        .color(STATUS_BLUE)
+                        .into(),
+                    STATUS_BLUE,
+                    "Installing...".into(),
+                ),
+                PackageStatus::Done => (
+                    text(char::from(Icon::CircleCheck))
+                        .size(14)
+                        .font(LUCIDE_FONT)
+                        .color(STATUS_GREEN)
+                        .into(),
+                    STATUS_GREEN,
+                    "Done".into(),
+                ),
+                PackageStatus::Failed(e) => (
+                    text(char::from(Icon::CircleX))
+                        .size(14)
+                        .font(LUCIDE_FONT)
+                        .color(STATUS_RED)
+                        .into(),
+                    STATUS_RED,
+                    format!("Failed: {e}"),
+                ),
+                PackageStatus::Cancelled => (
+                    text(char::from(Icon::CircleX))
+                        .size(14)
+                        .font(LUCIDE_FONT)
+                        .color(STATUS_AMBER)
+                        .into(),
+                    STATUS_AMBER,
+                    "Cancelled".into(),
+                ),
+            };
+
+            let pkg_row = row![
+                icon,
+                text(*name).size(14),
+                iced::widget::Space::new().width(Length::Fill),
+                text(label).size(12).color(color),
+            ]
+            .spacing(8)
+            .padding(padding::top(4).bottom(4).right(20))
+            .align_y(iced::Alignment::Center);
+
+            pkg_list = pkg_list.push(pkg_row);
+        }
+
+        let scrollable_pkgs = scrollable(pkg_list)
+            .height(Length::FillPortion(3))
+            .width(Length::Fill);
+
+        let log_box = terminal_log_box(&state.log)
+            .height(Length::FillPortion(2))
+            .width(Length::Fill);
+
+        // Post-install checklist (only when done and there are special packages)
+        let checklist: Option<Element<'_, Message>> = if state.done {
+            self.build_post_install_checklist()
+        } else {
+            None
+        };
+
+        // Footer
+        let mut cancel_btn = button(text("Cancel").size(14))
+            .style(cancel_button_style)
+            .padding([8, 20]);
+        if !state.done {
+            cancel_btn = cancel_btn.on_press(Message::CancelInstall);
+        }
+
+        let copy_btn: Element<'_, Message> = if state.done {
+            let (icon, label) = if state.copy_status {
+                (Icon::ClipboardCheck, "Copied!")
+            } else {
+                (Icon::Clipboard, "Copy log")
+            };
+            let mut btn = button(
+                row![
+                    text(char::from(icon)).size(14).font(LUCIDE_FONT),
+                    text(label).size(14),
+                ]
+                .spacing(6)
+                .align_y(iced::Alignment::Center),
+            )
+            .style(ghost_button_style)
+            .padding([8, 16]);
+            if !state.copy_status {
+                btn = btn.on_press(Message::CopyLog);
+            }
+            btn.into()
+        } else {
+            iced::widget::Space::new().into()
+        };
+
+        let mut done_btn = button(text("Done").size(14))
+            .style(continue_button_style)
+            .padding([8, 20]);
+        if state.done {
+            done_btn = done_btn.on_press(Message::FinishAndReset);
+        }
+
+        let footer = row![
+            cancel_btn,
+            iced::widget::Space::new().width(Length::Fill),
+            copy_btn,
+            done_btn,
+        ]
+        .spacing(8)
+        .width(Length::Fill);
+
+        let mut content = column![heading_row, subtitle, progress, scrollable_pkgs, log_box]
+            .spacing(12)
+            .width(Length::Fill)
+            .height(Length::Fill);
+
+        if let Some(cl) = checklist {
+            content = content.push(cl);
+        }
+
+        content = content.push(footer);
+
+        container(content)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .padding(28)
+            .into()
+    }
+
+    /// Build the post-install checklist grouped by SetupKind.
+    /// Returns `None` if no special packages succeeded.
+    fn build_post_install_checklist(&self) -> Option<Element<'_, Message>> {
+        use catalog::SetupKind;
+
+        let queue = &self.install_queue;
+        let statuses = &self.install.statuses;
+
+        // Only show checklist items for packages that actually succeeded
+        let succeeded = |i: usize| matches!(statuses.get(i), Some(PackageStatus::Done));
+
+        let download_pkgs: Vec<&Package> = queue
+            .iter()
+            .enumerate()
+            .filter(|(i, p)| p.setup_kind() == SetupKind::BrowserDownload && succeeded(*i))
+            .map(|(_, p)| p)
+            .collect();
+        let restart_pkgs: Vec<&Package> = queue
+            .iter()
+            .enumerate()
+            .filter(|(i, p)| p.setup_kind() == SetupKind::TerminalRestart && succeeded(*i))
+            .map(|(_, p)| p)
+            .collect();
+        let reboot_pkgs: Vec<&Package> = queue
+            .iter()
+            .enumerate()
+            .filter(|(i, p)| p.setup_kind() == SetupKind::Reboot && succeeded(*i))
+            .map(|(_, p)| p)
+            .collect();
+
+        if download_pkgs.is_empty() && restart_pkgs.is_empty() && reboot_pkgs.is_empty() {
+            return None;
+        }
+
+        let mut checklist = column![].spacing(8).width(Length::Fill);
+
+        checklist = checklist.push(text("Post-install steps").size(14).color(TEXT));
+
+        // Group 1: Browser downloads — one checkbox per package (keyed by package id)
+        for pkg in &download_pkgs {
+            if let Some(instruction) = pkg.setup_instruction() {
+                let key = pkg.id.clone();
+                let is_checked = self.checklist_checked.contains(&pkg.id);
+                let cb = checkbox(is_checked)
+                    .label(format!("{} \u{2014} {instruction}", pkg.name))
+                    .on_toggle(move |_| Message::ToggleChecklist(key.clone()))
+                    .size(14)
+                    .text_size(12)
+                    .style(package_checkbox_style);
+                checklist = checklist.push(cb);
+            }
+        }
+
+        // Group 2: Terminal restart — single checkbox (keyed by group name)
+        if !restart_pkgs.is_empty() {
+            let names: Vec<&str> = restart_pkgs.iter().map(|p| p.name.as_str()).collect();
+            let label = format!("Restart your terminal (for {})", names.join(", "));
+            let is_checked = self.checklist_checked.contains("_terminal_restart");
+            let cb = checkbox(is_checked)
+                .label(label)
+                .on_toggle(|_| Message::ToggleChecklist("_terminal_restart".into()))
+                .size(14)
+                .text_size(12)
+                .style(package_checkbox_style);
+            checklist = checklist.push(cb);
+        }
+
+        // Group 3: Reboot — single checkbox (keyed by group name)
+        if !reboot_pkgs.is_empty() {
+            let names: Vec<&str> = reboot_pkgs.iter().map(|p| p.name.as_str()).collect();
+            let label = format!("Reboot your system (for {})", names.join(", "));
+            let is_checked = self.checklist_checked.contains("_reboot");
+            let cb = checkbox(is_checked)
+                .label(label)
+                .on_toggle(|_| Message::ToggleChecklist("_reboot".into()))
+                .size(14)
+                .text_size(12)
+                .style(package_checkbox_style);
+            checklist = checklist.push(cb);
+        }
+
+        Some(checklist.into())
     }
 
     pub(crate) fn view_post_install_steps(&self) -> Element<'_, Message> {
