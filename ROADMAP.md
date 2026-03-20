@@ -2,6 +2,7 @@
 
 Potential future features, roughly ordered by impact-to-effort ratio:
 
+- **Guided setup wizard** — Dedicated walkthrough screens for packages needing manual steps (e.g. WSL restart, Topping manual download, bun shell config). Step-by-step instructions with "next" navigation instead of silent install.
 - **Export to script** — Generate a standalone `.ps1` script from the current selection (`winget install --id X` per package). Useful for sharing setups or running without the app.
 
 ## Later

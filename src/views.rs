@@ -61,7 +61,7 @@ impl App {
                     .spacing(6)
                     .align_y(iced::Alignment::Center);
 
-                button(container(content).center_x(Length::Fill).padding([10, 4]))
+                button(container(content).center_x(Length::Fill).padding([8, 4]))
                     .on_press(Message::ProfileSelected(p))
                     .width(Length::Fill)
                     .style(hero_profile_button_style)

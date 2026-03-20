@@ -10,9 +10,9 @@ Provision fixes that. Tell it what kind of machine this is — laptop or desktop
 
 ## Screenshots
 
-![Profile selection](assets/sreenshots/main-screen.jpg)
-![Package picker](assets/sreenshots/manual-picker.jpg)
-![Installing](assets/sreenshots/install-screen.jpg)
+![Profile selection](assets/screenshots/main-screen.jpg)
+![Package picker](assets/screenshots/manual-picker.jpg)
+![Installing](assets/screenshots/install-screen.jpg)
 
 ## Install
 
