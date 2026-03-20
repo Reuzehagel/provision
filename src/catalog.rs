@@ -24,6 +24,20 @@ impl CatalogSource {
     }
 }
 
+/// Classifies packages by what manual steps the user needs after install.
+/// Variant order is load-bearing — derives `Ord` by declaration position.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum SetupKind {
+    /// Normal winget install, no guidance needed.
+    Silent,
+    /// PATH changes — user needs to restart terminal (Bun, uv).
+    TerminalRestart,
+    /// Opens a browser URL — user must run the downloaded installer (Rust, Topping).
+    BrowserDownload,
+    /// System reboot required (WSL, RemoveWindowsAI).
+    Reboot,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Package {
     pub id: String,
@@ -52,6 +66,33 @@ impl Package {
         self.install_command
             .as_deref()
             .is_some_and(|c| c.starts_with("start http"))
+    }
+
+    /// Classify this package by what post-install action the user needs.
+    pub fn setup_kind(&self) -> SetupKind {
+        // Id-based overrides (can't be detected from install_command alone)
+        match self.id.as_str() {
+            "wsl" | "remove-windows-ai" => return SetupKind::Reboot,
+            _ => {}
+        }
+        match self.install_command.as_deref() {
+            Some(cmd) if cmd.starts_with("start http") => SetupKind::BrowserDownload,
+            Some(_) => SetupKind::TerminalRestart,
+            None => SetupKind::Silent,
+        }
+    }
+
+    /// User-facing checklist instruction for this package, if it needs manual steps.
+    pub fn setup_instruction(&self) -> Option<&'static str> {
+        match self.id.as_str() {
+            "bun" => Some("Restart your terminal for Bun to be available on PATH"),
+            "uv" => Some("Restart your terminal for uv to be available on PATH"),
+            "rust" => Some("Run rustup-init.exe \u{2014} follow the prompts and select defaults"),
+            "topping" => Some("Run the Topping installer you downloaded"),
+            "wsl" => Some("Reboot, then open Ubuntu to set up your Linux username and password"),
+            "remove-windows-ai" => Some("Reboot for changes to take effect"),
+            _ => None,
+        }
     }
 }
 
