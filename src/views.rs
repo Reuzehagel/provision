@@ -629,246 +629,26 @@ impl App {
     }
 
     pub(crate) fn view_installing(&self) -> Element<'_, Message> {
-        let state = &self.install;
-        let names: Vec<&str> = self.install_queue.iter().map(|p| p.name.as_str()).collect();
-        let total = names.len();
-        let (done_count, failed_count, cancelled_count) = state.status_counts();
-
-        // Heading
-        let heading_row = if state.done {
-            let label = match (self.dry_run, cancelled_count > 0) {
-                (true, true) => "Dry Run Cancelled".to_string(),
-                (true, false) => "Dry Run Complete".to_string(),
-                (false, true) => "Installation Cancelled".to_string(),
-                (false, false) => "Installation Complete".to_string(),
-            };
-            row![text(label).size(20)]
-                .spacing(8)
-                .align_y(iced::Alignment::Center)
-        } else {
-            let verb = if self.dry_run {
-                "[DRY RUN] Installing".to_string()
-            } else {
-                "Installing".to_string()
-            };
-            let count_text = format!(
-                "{} of {total} \u{00b7} {}",
-                state.current + 1,
-                state.elapsed_display()
-            );
-            row![text(verb).size(20), text(count_text).size(14).color(MUTED),]
-                .spacing(8)
-                .align_y(iced::Alignment::Center)
-        };
-
-        // Subtitle
-        let subtitle: Element<'_, Message> = if state.done {
-            let mut counts = row![].spacing(6).align_y(iced::Alignment::Center);
-            counts = counts
-                .push(
-                    text(char::from(Icon::CircleCheck))
-                        .size(13)
-                        .font(LUCIDE_FONT)
-                        .color(STATUS_GREEN),
-                )
-                .push(
-                    text(format!("{done_count} succeeded"))
-                        .size(13)
-                        .color(STATUS_GREEN),
-                );
-            counts = counts
-                .push(text("\u{00b7}").size(13).color(MUTED))
-                .push(
-                    text(char::from(Icon::CircleX))
-                        .size(13)
-                        .font(LUCIDE_FONT)
-                        .color(if failed_count > 0 { STATUS_RED } else { MUTED }),
-                )
-                .push(
-                    text(format!("{failed_count} failed"))
-                        .size(13)
-                        .color(if failed_count > 0 { STATUS_RED } else { MUTED }),
-                );
-            if cancelled_count > 0 {
-                counts = counts
-                    .push(text("\u{00b7}").size(13).color(MUTED))
-                    .push(
-                        text(char::from(Icon::CircleX))
-                            .size(13)
-                            .font(LUCIDE_FONT)
-                            .color(STATUS_AMBER),
-                    )
-                    .push(
-                        text(format!("{cancelled_count} cancelled"))
-                            .size(13)
-                            .color(STATUS_AMBER),
-                    );
-            }
-            counts = counts
-                .push(text("\u{00b7}").size(13).color(MUTED))
-                .push(
-                    text(char::from(Icon::Clock))
-                        .size(13)
-                        .font(LUCIDE_FONT)
-                        .color(MUTED),
-                )
-                .push(text(state.elapsed_display()).size(13).color(MUTED));
-            counts.into()
-        } else if self.dry_run {
-            text("No packages will actually be installed")
-                .size(13)
-                .color(STATUS_AMBER)
-                .into()
-        } else {
-            let name = names.get(state.current).unwrap_or(&"...");
-            text(*name).size(13).color(MUTED).into()
-        };
-
-        let completed = (done_count + failed_count + cancelled_count) as f32;
-        let progress = progress_bar(0.0..=total as f32, completed);
-
-        // Package list
-        let mut pkg_list = column![].spacing(2).width(Length::Fill);
-        for (i, name) in names.iter().enumerate() {
-            let (icon, color, label): (Element<'_, Message>, _, _) = match &state.statuses[i] {
-                PackageStatus::Pending => (
-                    text(char::from(Icon::Circle))
-                        .size(14)
-                        .font(LUCIDE_FONT)
-                        .color(MUTED)
-                        .into(),
-                    MUTED,
-                    "Pending".into(),
-                ),
-                PackageStatus::Installing => (
-                    text(SPINNER_FRAMES[self.spinner_frame])
-                        .size(14)
-                        .color(STATUS_BLUE)
-                        .into(),
-                    STATUS_BLUE,
-                    "Installing...".into(),
-                ),
-                PackageStatus::Done => (
-                    text(char::from(Icon::CircleCheck))
-                        .size(14)
-                        .font(LUCIDE_FONT)
-                        .color(STATUS_GREEN)
-                        .into(),
-                    STATUS_GREEN,
-                    "Done".into(),
-                ),
-                PackageStatus::Failed(e) => (
-                    text(char::from(Icon::CircleX))
-                        .size(14)
-                        .font(LUCIDE_FONT)
-                        .color(STATUS_RED)
-                        .into(),
-                    STATUS_RED,
-                    format!("Failed: {e}"),
-                ),
-                PackageStatus::Cancelled => (
-                    text(char::from(Icon::CircleX))
-                        .size(14)
-                        .font(LUCIDE_FONT)
-                        .color(STATUS_AMBER)
-                        .into(),
-                    STATUS_AMBER,
-                    "Cancelled".into(),
-                ),
-            };
-
-            let pkg_row = row![
-                icon,
-                text(*name).size(14),
-                iced::widget::Space::new().width(Length::Fill),
-                text(label).size(12).color(color),
-            ]
-            .spacing(8)
-            .padding(padding::top(4).bottom(4).right(20))
-            .align_y(iced::Alignment::Center);
-
-            pkg_list = pkg_list.push(pkg_row);
-        }
-
-        let scrollable_pkgs = scrollable(pkg_list)
-            .height(Length::FillPortion(3))
-            .width(Length::Fill);
-
-        let log_box = terminal_log_box(&state.log)
-            .height(Length::FillPortion(2))
-            .width(Length::Fill);
-
-        // Post-install checklist (only when done and there are special packages)
-        let checklist: Option<Element<'_, Message>> = if state.done {
+        let checklist = if self.install.done {
             self.build_post_install_checklist()
         } else {
             None
         };
 
-        // Footer
-        let mut cancel_btn = button(text("Cancel").size(14))
-            .style(cancel_button_style)
-            .padding([8, 20]);
-        if !state.done {
-            cancel_btn = cancel_btn.on_press(Message::CancelInstall);
-        }
-
-        let copy_btn: Element<'_, Message> = if state.done {
-            let (icon, label) = if state.copy_status {
-                (Icon::ClipboardCheck, "Copied!")
-            } else {
-                (Icon::Clipboard, "Copy log")
-            };
-            let mut btn = button(
-                row![
-                    text(char::from(icon)).size(14).font(LUCIDE_FONT),
-                    text(label).size(14),
-                ]
-                .spacing(6)
-                .align_y(iced::Alignment::Center),
-            )
-            .style(ghost_button_style)
-            .padding([8, 16]);
-            if !state.copy_status {
-                btn = btn.on_press(Message::CopyLog);
-            }
-            btn.into()
-        } else {
-            iced::widget::Space::new().into()
-        };
-
-        let mut done_btn = button(text("Done").size(14))
-            .style(continue_button_style)
-            .padding([8, 20]);
-        if state.done {
-            done_btn = done_btn.on_press(Message::FinishAndReset);
-        }
-
-        let footer = row![
-            cancel_btn,
-            iced::widget::Space::new().width(Length::Fill),
-            copy_btn,
-            done_btn,
-        ]
-        .spacing(8)
-        .width(Length::Fill);
-
-        let mut content = column![heading_row, subtitle, progress, scrollable_pkgs, log_box]
-            .spacing(12)
-            .width(Length::Fill)
-            .height(Length::Fill);
-
-        if let Some(cl) = checklist {
-            content = content.push(cl);
-        }
-
-        content = content.push(footer);
-
-        container(content)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .padding(28)
-            .into()
+        view_progress_screen(
+            &self.install,
+            ProgressLabels {
+                verb: "Installing",
+                done_label: "Installation",
+                dry_run_warning: "No packages will actually be installed",
+                cancel_msg: Message::CancelInstall,
+                done_msg: Message::FinishAndReset,
+            },
+            self.install_queue.iter().map(|p| p.name.as_str()),
+            self.dry_run,
+            self.spinner_frame,
+            checklist,
+        )
     }
 
     /// Build the post-install checklist grouped by SetupKind.
@@ -1193,16 +973,17 @@ impl App {
     pub(crate) fn view_updating(&self) -> Element<'_, Message> {
         view_progress_screen(
             &self.upgrade,
-            &ProgressLabels {
+            ProgressLabels {
                 verb: "Upgrading",
                 done_label: "Upgrade",
                 dry_run_warning: "No packages will actually be upgraded",
+                cancel_msg: Message::CancelUpgrade,
+                done_msg: Message::FinishUpdateAndReset,
             },
             self.upgrade_queue.iter().map(|p| p.name.as_str()),
             self.dry_run,
-            Message::CancelUpgrade,
-            Message::FinishUpdateAndReset,
             self.spinner_frame,
+            None,
         )
     }
 
@@ -1652,16 +1433,17 @@ impl App {
     pub(crate) fn view_uninstalling(&self) -> Element<'_, Message> {
         view_progress_screen(
             &self.uninstall,
-            &ProgressLabels {
+            ProgressLabels {
                 verb: "Uninstalling",
                 done_label: "Uninstall",
                 dry_run_warning: "No packages will actually be uninstalled",
+                cancel_msg: Message::CancelUninstall,
+                done_msg: Message::FinishUninstallAndReset,
             },
             self.uninstall_queue.iter().map(|p| p.name.as_str()),
             self.dry_run,
-            Message::CancelUninstall,
-            Message::FinishUninstallAndReset,
             self.spinner_frame,
+            None,
         )
     }
 
@@ -1871,16 +1653,17 @@ impl App {
     pub(crate) fn view_winget_search_installing(&self) -> Element<'_, Message> {
         view_progress_screen(
             &self.winget_search_install,
-            &ProgressLabels {
+            ProgressLabels {
                 verb: "Installing",
                 done_label: "Installation",
                 dry_run_warning: "No packages will actually be installed",
+                cancel_msg: Message::CancelWingetSearchInstall,
+                done_msg: Message::FinishWingetSearchInstall,
             },
             self.winget_search_queue.iter().map(|p| p.name.as_str()),
             self.dry_run,
-            Message::CancelWingetSearchInstall,
-            Message::FinishWingetSearchInstall,
             self.spinner_frame,
+            None,
         )
     }
 
@@ -2161,18 +1944,19 @@ impl App {
     pub(crate) fn view_github_cloning(&self) -> Element<'_, Message> {
         view_progress_screen(
             &self.github_clone,
-            &ProgressLabels {
+            ProgressLabels {
                 verb: "Cloning",
                 done_label: "Clone",
                 dry_run_warning: "No repos will actually be cloned",
+                cancel_msg: Message::CancelGitHubClone,
+                done_msg: Message::FinishGitHubClone,
             },
             self.github_clone_queue
                 .iter()
                 .map(|item| item.repo.name.as_str()),
             self.dry_run,
-            Message::CancelGitHubClone,
-            Message::FinishGitHubClone,
             self.spinner_frame,
+            None,
         )
     }
 
@@ -2399,7 +2183,7 @@ fn terminal_log_box(log: &LogBuffer) -> iced::widget::Container<'_, Message> {
     .style(terminal_box_style)
 }
 
-/// Labels that vary between the install and upgrade progress screens.
+/// Config that varies between progress screens (install, upgrade, uninstall, clone).
 struct ProgressLabels {
     /// Present participle, e.g. "Installing" or "Upgrading"
     verb: &'static str,
@@ -2407,18 +2191,26 @@ struct ProgressLabels {
     done_label: &'static str,
     /// Dry-run subtitle, e.g. "No packages will actually be installed"
     dry_run_warning: &'static str,
-}
-
-/// Shared layout for both the Installing and Updating screens.
-fn view_progress_screen<'a>(
-    state: &'a ProgressState,
-    labels: &ProgressLabels,
-    names: impl Iterator<Item = &'a str>,
-    dry_run: bool,
     cancel_msg: Message,
     done_msg: Message,
+}
+
+/// Shared layout for progress screens (install, upgrade, uninstall, clone).
+fn view_progress_screen<'a>(
+    state: &'a ProgressState,
+    labels: ProgressLabels,
+    names: impl Iterator<Item = &'a str>,
+    dry_run: bool,
     spinner_frame: usize,
+    extra_content: Option<Element<'a, Message>>,
 ) -> Element<'a, Message> {
+    let ProgressLabels {
+        verb,
+        done_label,
+        dry_run_warning,
+        cancel_msg,
+        done_msg,
+    } = labels;
     let names: Vec<&str> = names.collect();
     let total = names.len();
     let (done_count, failed_count, cancelled_count) = state.status_counts();
@@ -2428,17 +2220,17 @@ fn view_progress_screen<'a>(
         let label = match (dry_run, cancelled_count > 0) {
             (true, true) => "Dry Run Cancelled".to_string(),
             (true, false) => "Dry Run Complete".to_string(),
-            (false, true) => format!("{} Cancelled", labels.done_label),
-            (false, false) => format!("{} Complete", labels.done_label),
+            (false, true) => format!("{} Cancelled", done_label),
+            (false, false) => format!("{} Complete", done_label),
         };
         row![text(label).size(20)]
             .spacing(8)
             .align_y(iced::Alignment::Center)
     } else {
         let verb_text = if dry_run {
-            format!("[DRY RUN] {}", labels.verb)
+            format!("[DRY RUN] {}", verb)
         } else {
-            labels.verb.to_string()
+            verb.to_string()
         };
         let count_text = format!(
             "{} of {total} \u{00b7} {}",
@@ -2511,10 +2303,7 @@ fn view_progress_screen<'a>(
 
         counts.into()
     } else if dry_run {
-        text(labels.dry_run_warning)
-            .size(13)
-            .color(STATUS_AMBER)
-            .into()
+        text(dry_run_warning).size(13).color(STATUS_AMBER).into()
     } else {
         let name = names.get(state.current).unwrap_or(&"...");
         text(*name).size(13).color(MUTED).into()
@@ -2523,7 +2312,7 @@ fn view_progress_screen<'a>(
     let completed = (done_count + failed_count + cancelled_count) as f32;
     let progress = progress_bar(0.0..=total as f32, completed);
 
-    let active_label = format!("{}...", labels.verb);
+    let active_label = format!("{}...", verb);
     let mut pkg_list = column![].spacing(2).width(Length::Fill);
     for (i, name) in names.iter().enumerate() {
         let (icon, color, label): (Element<'_, Message>, _, _) = match &state.statuses[i] {
@@ -2641,17 +2430,16 @@ fn view_progress_screen<'a>(
     .spacing(8)
     .width(Length::Fill);
 
-    let content = column![
-        heading_row,
-        subtitle,
-        progress,
-        scrollable_pkgs,
-        log_box,
-        footer,
-    ]
-    .spacing(12)
-    .width(Length::Fill)
-    .height(Length::Fill);
+    let mut content = column![heading_row, subtitle, progress, scrollable_pkgs, log_box]
+        .spacing(12)
+        .width(Length::Fill)
+        .height(Length::Fill);
+
+    if let Some(extra) = extra_content {
+        content = content.push(extra);
+    }
+
+    content = content.push(footer);
 
     container(content)
         .width(Length::Fill)

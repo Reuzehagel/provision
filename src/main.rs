@@ -578,6 +578,49 @@ pub(crate) enum Message {
     Noop(()),
 }
 
+/// Trait for items that provide a display name (used in progress handlers).
+trait Named {
+    fn display_name(&self) -> &str;
+}
+impl Named for Package {
+    fn display_name(&self) -> &str {
+        &self.name
+    }
+}
+impl Named for UpgradeablePackage {
+    fn display_name(&self) -> &str {
+        &self.name
+    }
+}
+impl Named for upgrade::InstalledPackage {
+    fn display_name(&self) -> &str {
+        &self.name
+    }
+}
+impl Named for upgrade::SearchPackage {
+    fn display_name(&self) -> &str {
+        &self.name
+    }
+}
+impl Named for github::CloneItem {
+    fn display_name(&self) -> &str {
+        &self.repo.name
+    }
+}
+
+/// Forward a progress event to a `ProgressState`, looking up the item name from the queue.
+fn progress_event<T: Named>(
+    state: &mut ProgressState,
+    event: install::InstallProgress,
+    queue: &[T],
+    verb: &str,
+) {
+    state.handle_event(event, |i| {
+        let name = queue.get(i).map(|p| p.display_name()).unwrap_or("...");
+        format!("{verb} {name}")
+    });
+}
+
 /// Fire a message after a 4-second delay (used for clearing transient UI feedback).
 fn delayed_clear(msg: Message) -> Task<Message> {
     Task::perform(
@@ -1012,11 +1055,7 @@ impl App {
     }
 
     fn handle_install_progress(&mut self, event: install::InstallProgress) -> Task<Message> {
-        let queue = &self.install_queue;
-        self.install.handle_event(event, |i| {
-            let name = queue.get(i).map(|p| p.name.as_str()).unwrap_or("...");
-            format!("Installing {name}")
-        });
+        progress_event(&mut self.install, event, &self.install_queue, "Installing");
         Task::none()
     }
 
@@ -1115,11 +1154,7 @@ impl App {
     }
 
     fn handle_upgrade_progress(&mut self, event: install::InstallProgress) -> Task<Message> {
-        let queue = &self.upgrade_queue;
-        self.upgrade.handle_event(event, |i| {
-            let name = queue.get(i).map(|p| p.name.as_str()).unwrap_or("...");
-            format!("Upgrading {name}")
-        });
+        progress_event(&mut self.upgrade, event, &self.upgrade_queue, "Upgrading");
         Task::none()
     }
 
@@ -1176,11 +1211,12 @@ impl App {
     }
 
     fn handle_uninstall_progress(&mut self, event: install::InstallProgress) -> Task<Message> {
-        let queue = &self.uninstall_queue;
-        self.uninstall.handle_event(event, |i| {
-            let name = queue.get(i).map(|p| p.name.as_str()).unwrap_or("...");
-            format!("Removing {name}")
-        });
+        progress_event(
+            &mut self.uninstall,
+            event,
+            &self.uninstall_queue,
+            "Removing",
+        );
         Task::none()
     }
 
@@ -1307,11 +1343,12 @@ impl App {
         &mut self,
         event: install::InstallProgress,
     ) -> Task<Message> {
-        let queue = &self.winget_search_queue;
-        self.winget_search_install.handle_event(event, |i| {
-            let name = queue.get(i).map(|p| p.name.as_str()).unwrap_or("...");
-            format!("Installing {name}")
-        });
+        progress_event(
+            &mut self.winget_search_install,
+            event,
+            &self.winget_search_queue,
+            "Installing",
+        );
         Task::none()
     }
 
@@ -1474,14 +1511,12 @@ impl App {
     }
 
     fn handle_github_clone_progress(&mut self, event: install::InstallProgress) -> Task<Message> {
-        let queue = &self.github_clone_queue;
-        self.github_clone.handle_event(event, |i| {
-            let name = queue
-                .get(i)
-                .map(|item| item.repo.name.as_str())
-                .unwrap_or("...");
-            format!("Cloning {name}")
-        });
+        progress_event(
+            &mut self.github_clone,
+            event,
+            &self.github_clone_queue,
+            "Cloning",
+        );
         Task::none()
     }
 
@@ -1633,7 +1668,7 @@ impl App {
         if cancelled > 0 {
             header.push_str(&format!(", {cancelled} cancelled"));
         }
-        let text = format!("{header}\n\n{}", state.log.lines.join("\n"));
+        let text = format!("{header}\n\n{}", state.log.joined());
         state.copy_status = true;
 
         Task::batch([
