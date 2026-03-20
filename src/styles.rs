@@ -357,6 +357,20 @@ pub fn browser_badge_style(_theme: &Theme) -> container::Style {
     )
 }
 
+pub fn reboot_badge_style(_theme: &Theme) -> container::Style {
+    badge_base(
+        Color::from_rgba(STATUS_RED.r, STATUS_RED.g, STATUS_RED.b, 0.15),
+        Color::from_rgba(STATUS_RED.r, STATUS_RED.g, STATUS_RED.b, 0.3),
+    )
+}
+
+pub fn restart_badge_style(_theme: &Theme) -> container::Style {
+    badge_base(
+        Color::from_rgba(STATUS_BLUE.r, STATUS_BLUE.g, STATUS_BLUE.b, 0.15),
+        Color::from_rgba(STATUS_BLUE.r, STATUS_BLUE.g, STATUS_BLUE.b, 0.3),
+    )
+}
+
 pub fn hero_card_style(_theme: &Theme) -> container::Style {
     use iced::Radians;
     use iced::gradient::{self, Linear};
