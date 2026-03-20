@@ -12,7 +12,10 @@ Provision fixes that. Tell it what kind of machine this is — laptop or desktop
 
 ![Profile selection](assets/screenshots/main-screen.jpg)
 ![Package picker](assets/screenshots/manual-picker.jpg)
+![Review](assets/screenshots/review-screen.jpg)
 ![Installing](assets/screenshots/install-screen.jpg)
+![Settings](assets/screenshots/settings-screen.jpg)
+![GitHub repos](assets/screenshots/repo-screen.jpg)
 
 ## Install
 
