@@ -385,6 +385,14 @@ impl App {
             )
         };
 
+        let settings = settings::load_settings();
+        let include_unknown = settings.include_unknown;
+        let (upgrade_scan_task, upgrade_scan_handle) = Task::run(
+            upgrade::scan_upgrades(dry_run, include_unknown),
+            Message::UpdateScanProgress,
+        )
+        .abortable();
+
         let catalog = catalog::load_catalog();
         let categories = catalog::categories(&catalog);
 
@@ -399,7 +407,7 @@ impl App {
                 selected: HashSet::new(),
                 search: String::new(),
                 search_lower: String::new(),
-                settings: settings::load_settings(),
+                settings,
                 settings_tab: settings::SettingsTab::default(),
                 install_queue: Vec::new(),
                 checklist_checked: HashSet::new(),
@@ -412,7 +420,10 @@ impl App {
                 uninstall_queue: Vec::new(),
                 uninstall: ProgressState::default(),
                 size_scan_done: false,
-                update_scan: UpdateScanState::default(),
+                update_scan: UpdateScanState {
+                    _handle: Some(upgrade_scan_handle.abort_on_drop()),
+                    ..UpdateScanState::default()
+                },
                 upgrade_queue: Vec::new(),
                 upgrade: ProgressState::default(),
                 selection_status: None,
@@ -440,12 +451,12 @@ impl App {
                 github_bootstrap_items: Vec::new(),
                 _github_device_flow_handle: None,
             },
-            Task::batch([scan_task, catalog_task, version_task]),
+            Task::batch([scan_task, catalog_task, version_task, upgrade_scan_task]),
         )
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub(crate) enum Screen {
     #[default]
     ProfileSelect,
@@ -1037,10 +1048,14 @@ impl App {
     fn handle_update_scan_progress(&mut self, event: upgrade::ScanProgress) -> Task<Message> {
         match event {
             upgrade::ScanProgress::Activity { line } => {
-                self.update_scan.log.set_live(line);
+                if self.screen == Screen::UpdateScanning {
+                    self.update_scan.log.set_live(line);
+                }
             }
             upgrade::ScanProgress::Log { line } => {
-                self.update_scan.log.push(line);
+                if self.screen == Screen::UpdateScanning {
+                    self.update_scan.log.push(line);
+                }
             }
             upgrade::ScanProgress::Completed { packages } => {
                 self.update_scan.done = true;
@@ -1052,7 +1067,9 @@ impl App {
                     self.update_scan.selected =
                         packages.iter().map(|p| p.winget_id.clone()).collect();
                     self.update_scan.packages = packages;
-                    self.screen = Screen::UpdateSelect;
+                    if self.screen == Screen::UpdateScanning {
+                        self.screen = Screen::UpdateSelect;
+                    }
                 }
             }
             upgrade::ScanProgress::Failed { error } => {
